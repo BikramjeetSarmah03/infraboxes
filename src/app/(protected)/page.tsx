@@ -18,7 +18,7 @@ export default async function Home() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 font-sans dark:bg-black p-4">
+    <div className="flex flex-1 h-full flex-col items-center justify-center bg-zinc-50 font-sans dark:bg-black p-4">
       <main className="flex w-full max-w-2xl flex-col items-center gap-8 rounded-2xl border bg-white p-12 shadow-sm dark:border-zinc-800 dark:bg-black">
         <div className="flex w-full items-center justify-between">
           <Image

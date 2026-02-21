@@ -2,6 +2,8 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/modules/auth/infrastructure/auth-server";
 
+import { MainSidebarLayout } from "@/components/common/main-sidebar-layout";
+
 interface ProtectedLayoutProps {
   children: React.ReactNode;
 }
@@ -17,5 +19,5 @@ export default async function ProtectedLayout({
     redirect("/auth/login");
   }
 
-  return <>{children}</>;
+  return <MainSidebarLayout>{children}</MainSidebarLayout>;
 }
