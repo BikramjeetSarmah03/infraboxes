@@ -7,6 +7,7 @@ import {
   Mailbox,
   Package,
   ServerCrash,
+  Settings2,
 } from "lucide-react";
 
 import {
@@ -60,6 +61,11 @@ const navItems = [
     title: "Google Mailboxes",
     url: "/mailboxes/google",
     icon: Mail,
+  },
+  {
+    title: "Settings",
+    url: "/settings",
+    icon: Settings2,
   },
 ];
 

@@ -27,6 +27,7 @@ import {
 import { authClient } from "@/modules/auth/infrastructure/auth-client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import Link from "next/link";
 
 export function NavUser() {
   const { isMobile } = useSidebar();
@@ -104,16 +105,20 @@ export function NavUser() {
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem>
-                <BadgeCheck className="mr-2" />
-                Profile
+              <DropdownMenuItem asChild>
+                <Link href="/settings">
+                  <BadgeCheck />
+                  Profile
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/settings/billing">
+                  <CreditCard />
+                  Billing
+                </Link>
               </DropdownMenuItem>
               <DropdownMenuItem>
-                <CreditCard className="mr-2" />
-                Billing
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Bell className="mr-2" />
+                <Bell />
                 Notifications
               </DropdownMenuItem>
             </DropdownMenuGroup>
