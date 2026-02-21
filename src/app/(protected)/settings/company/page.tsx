@@ -1,6 +1,6 @@
-import { Building2, Pencil, Calendar, MapPin, Fingerprint } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Building2, Calendar, Fingerprint, MapPin, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 export default function CompanySettingsPage() {
   return (

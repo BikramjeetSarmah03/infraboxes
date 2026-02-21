@@ -1,17 +1,17 @@
-import { headers } from "next/headers";
-import { redirect } from "next/navigation";
-import { auth } from "@/modules/auth/infrastructure/auth-server";
 import {
+  ArrowRight,
+  ArrowUpRight,
+  CheckCircle2,
   Globe,
   Mail,
-  CheckCircle2,
-  ArrowUpRight,
-  ArrowRight,
   MailOpen,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { headers } from "next/headers";
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { auth } from "@/modules/auth/infrastructure/auth-server";
 
 export default async function Home() {
   const session = await auth.api.getSession({
@@ -27,7 +27,7 @@ export default async function Home() {
   }
 
   return (
-    <div className="w-full h-full min-h-screen relative overflow-hidden bg-zinc-50/50 dark:bg-black">
+    <div className="w-full h-full flex-1 relative overflow-hidden bg-zinc-50/50 dark:bg-black">
       {/* Subtle Background Glow Desktop */}
       <div className="absolute top-0 inset-x-0 h-125 w-full bg-[radial-gradient(ellipse_at_top,var(--tw-gradient-stops))] from-blue-100/50 via-zinc-50/0 to-transparent dark:from-indigo-900/10 dark:via-black/0 dark:to-transparent pointer-events-none -z-10" />
 

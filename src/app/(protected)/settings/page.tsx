@@ -1,16 +1,16 @@
-import { auth } from "@/modules/auth/infrastructure/auth-server";
-import { headers } from "next/headers";
-import { redirect } from "next/navigation";
 import {
-  User,
   Calendar,
-  ShieldCheck,
   Globe,
   Mailbox,
   Pencil,
+  ShieldCheck,
+  User,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { auth } from "@/modules/auth/infrastructure/auth-server";
 
 export default async function ProfilePage() {
   const session = await auth.api.getSession({

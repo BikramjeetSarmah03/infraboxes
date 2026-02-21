@@ -1,6 +1,6 @@
+import { AppSidebar } from "@/components/common/app-sidebar";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { MainHeader } from "./main-header";
-import { AppSidebar } from "@/components/common/app-sidebar";
 
 export function MainSidebarLayout({ children }: { children: React.ReactNode }) {
   return (

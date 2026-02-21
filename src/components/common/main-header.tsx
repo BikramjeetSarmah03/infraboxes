@@ -1,5 +1,7 @@
 "use client";
 
+import { usePathname } from "next/navigation";
+import { Fragment } from "react";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -10,8 +12,6 @@ import {
 } from "@/components/ui/breadcrumb";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { usePathname } from "next/navigation";
-import { Fragment } from "react";
 
 export function MainHeader() {
   const pathname = usePathname();

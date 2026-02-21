@@ -5,11 +5,12 @@ import {
   LayoutDashboard,
   Mail,
   Mailbox,
+  Network,
   Package,
-  ServerCrash,
   Settings2,
 } from "lucide-react";
-
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   Sidebar,
   SidebarContent,
@@ -21,15 +22,13 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar";
-import { NavUser } from "./nav-user";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { cn } from "@/lib/utils";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+import { NavUser } from "./nav-user";
 
 const navItems = [
   {
@@ -45,7 +44,7 @@ const navItems = [
   {
     title: "DNS Records",
     url: "/dns-records",
-    icon: ServerCrash,
+    icon: Network,
   },
   {
     title: "All Mailboxes",

@@ -7,7 +7,9 @@ import {
   CreditCard,
   LogOut,
 } from "lucide-react";
-
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -25,9 +27,6 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { authClient } from "@/modules/auth/infrastructure/auth-client";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
-import Link from "next/link";
 
 export function NavUser() {
   const { isMobile } = useSidebar();

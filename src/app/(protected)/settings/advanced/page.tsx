@@ -1,9 +1,9 @@
 import {
-  Settings2,
   AlertTriangle,
+  RotateCcw,
+  Settings2,
   Terminal,
   Trash2,
-  RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 

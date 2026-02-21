@@ -1,6 +1,6 @@
-import { CreditCard, Rocket, Check, ArrowRight, History } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ArrowRight, Check, CreditCard, History, Rocket } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 export default function BillingSettingsPage() {
   return (

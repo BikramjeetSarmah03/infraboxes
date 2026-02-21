@@ -1,8 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { auth } from "@/modules/auth/infrastructure/auth-server";
-
 import { MainSidebarLayout } from "@/components/common/main-sidebar-layout";
+import { auth } from "@/modules/auth/infrastructure/auth-server";
 
 interface ProtectedLayoutProps {
   children: React.ReactNode;

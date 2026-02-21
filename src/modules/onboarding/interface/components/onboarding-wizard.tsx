@@ -97,7 +97,7 @@ export function OnboardingWizard({
 }) {
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
+  const _router = useRouter();
 
   const form = useForm<OnboardingFormValues>({
     resolver: zodResolver(onboardingSchema),
@@ -392,7 +392,7 @@ export function OnboardingWizard({
                                       <CommandItem
                                         value={country.name}
                                         key={country.isoCode}
-                                        onSelect={(value) => {
+                                        onSelect={(_value) => {
                                           form.setValue(
                                             "country",
                                             country.name,
@@ -458,7 +458,7 @@ export function OnboardingWizard({
                                       <CommandItem
                                         value={state.name}
                                         key={state.isoCode}
-                                        onSelect={(value) => {
+                                        onSelect={(_value) => {
                                           form.setValue("state", state.name);
                                           form.setValue("city", "");
                                           setOpenState(false);
@@ -522,7 +522,7 @@ export function OnboardingWizard({
                                       <CommandItem
                                         value={city.name}
                                         key={city.name}
-                                        onSelect={(value) => {
+                                        onSelect={(_value) => {
                                           form.setValue("city", city.name);
                                           setOpenCity(false);
                                         }}
