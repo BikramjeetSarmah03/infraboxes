@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { Button } from "@/components/ui/button";
@@ -16,8 +16,8 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { InputPhone } from "@/components/ui/input-phone";
-import { authClient } from "../../infrastructure/auth-client";
 import { cn } from "@/lib/utils";
+import { authClient } from "../../infrastructure/auth-client";
 
 const formSchema = z.object({
   name: z.string().min(2, {

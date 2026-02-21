@@ -1,6 +1,6 @@
-import { auth } from "@/modules/auth/infrastructure/auth-server";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { auth } from "@/modules/auth/infrastructure/auth-server";
 
 interface ProtectedLayoutProps {
   children: React.ReactNode;

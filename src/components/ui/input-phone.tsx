@@ -94,7 +94,7 @@ function CountrySelect({
         <Button
           type="button"
           variant="outline"
-          className={cn("flex h-10 gap-1 rounded-s-lg rounded-e-none px-3")}
+          className={cn("flex h-9 gap-1 rounded-s-lg rounded-e-none px-3")}
           disabled={disabled}
         >
           <FlagComponent country={value} countryName={value} />

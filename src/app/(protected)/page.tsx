@@ -1,12 +1,21 @@
-import Image from "next/image";
-import { LogoutButton } from "@/modules/auth/interface/components/logout-button";
-import { auth } from "@/modules/auth/infrastructure/auth-server";
 import { headers } from "next/headers";
+import Image from "next/image";
+import { redirect } from "next/navigation";
+import { auth } from "@/modules/auth/infrastructure/auth-server";
+import { LogoutButton } from "@/modules/auth/interface/components/logout-button";
 
 export default async function Home() {
   const session = await auth.api.getSession({
     headers: await headers(),
   });
+
+  if (!session) {
+    redirect("/auth/login");
+  }
+
+  if (!session.user.isAccountSetuped) {
+    redirect("/onboarding");
+  }
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 font-sans dark:bg-black p-4">

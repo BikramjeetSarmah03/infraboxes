@@ -12,7 +12,8 @@
     "db:generate": "drizzle-kit generate",
     "db:studio": "drizzle-kit studio",
     "db:migrate": "drizzle-kit migrate",
-    "db:pull": "drizzle-kit pull"
+    "db:pull": "drizzle-kit pull",
+    "check": "biome check --write ."
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -22,7 +23,9 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
+    "country-state-city": "^3.2.1",
     "drizzle-orm": "^0.45.1",
+    "framer-motion": "^12.34.3",
     "lucide-react": "^0.575.0",
     "next": "16.1.6",
     "postgres": "^3.4.8",

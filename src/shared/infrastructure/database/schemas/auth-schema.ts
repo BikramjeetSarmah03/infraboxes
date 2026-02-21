@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean } from "drizzle-orm/pg-core";
+import { boolean, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -7,6 +7,14 @@ export const user = pgTable("user", {
   emailVerified: boolean("emailVerified").notNull(),
   image: text("image"),
   phoneNumber: text("phoneNumber"),
+  isAccountSetuped: boolean("isAccountSetuped").default(false).notNull(),
+  companyName: text("companyName"),
+  companyCategory: text("companyCategory"),
+  address: text("address"),
+  country: text("country"),
+  state: text("state"),
+  city: text("city"),
+  zip: text("zip"),
   createdAt: timestamp("createdAt").notNull(),
   updatedAt: timestamp("updatedAt").notNull(),
 });

@@ -1,8 +1,8 @@
+import { eq } from "drizzle-orm";
 import { db } from "@/shared/infrastructure/database/db-client";
 import { user as userTable } from "@/shared/infrastructure/database/schemas";
 import { User } from "../domain/user-entity";
 import type { UserRepository } from "../domain/user-repository-interface";
-import { eq } from "drizzle-orm";
 
 export class DrizzleUserRepository implements UserRepository {
   async getById(id: string): Promise<User | null> {
