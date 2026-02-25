@@ -36,7 +36,7 @@ export function SettingsSidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="w-full lg:w-80 border-r border-zinc-200 dark:border-zinc-800 flex flex-col bg-zinc-50/50 dark:bg-zinc-900/10 h-full lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] shrink-0">
+    <aside className="w-80 border-r border-zinc-200 dark:border-zinc-800 flex flex-col bg-zinc-50/50 dark:bg-zinc-900/10  sticky top-14 h-[calc(100vh-3.5rem)] shrink-0">
       <div className="p-6 border-b border-zinc-200 dark:border-zinc-800 shrink-0">
         <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-50 tracking-tight">
           Settings

@@ -15,9 +15,21 @@ export const user = pgTable("user", {
   state: text("state"),
   city: text("city"),
   zip: text("zip"),
+  scheduledForDeletion: boolean("scheduledForDeletion").default(false),
+  deletionScheduledAt: timestamp("deletionScheduledAt"),
   createdAt: timestamp("createdAt").notNull(),
   updatedAt: timestamp("updatedAt").notNull(),
 });
+
+import { relations } from "drizzle-orm";
+import { company } from "./company-schema";
+
+export const userRelations = relations(user, ({ one }) => ({
+  company: one(company, {
+    fields: [user.id],
+    references: [company.userId],
+  }),
+}));
 
 export const session = pgTable("session", {
   id: text("id").primaryKey(),

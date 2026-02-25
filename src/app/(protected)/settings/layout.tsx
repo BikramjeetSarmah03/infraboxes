@@ -7,7 +7,7 @@ export default function SettingsLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col lg:flex-row flex-1 bg-white dark:bg-black">
+    <div className="flex flex-row flex-1 bg-white dark:bg-black">
       {/* Secondary Sidebar - Sticky on Desktop */}
       <SettingsSidebar />
 
