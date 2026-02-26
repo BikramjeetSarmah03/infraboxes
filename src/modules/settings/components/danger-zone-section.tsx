@@ -2,7 +2,7 @@
 
 import { AlertTriangle, Loader2, RotateCcw, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 import { toast } from "sonner";
 import {
   AlertDialog,
