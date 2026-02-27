@@ -7,17 +7,24 @@ const RESELLERCLUB_API_KEY = process.env.RESELLERCLUB_API_KEY;
 const PROXY_TOKEN = process.env.PROXY_TOKEN;
 
 // API base URLs (production only)
-const RC_BASE_URL = "https://httpapi.com/api";
-const RC_DOMAINCHECK_URL = "https://domaincheck.httpapi.com/api/domains/available.json";
-const RC_DNS_URL = "https://httpapi.com/api/dns";
+// API base URLs
+const IS_TEST = process.env.RESELLERCLUB_IS_TEST === "true";
+const RC_BASE_URL = IS_TEST
+  ? "https://test.httpapi.com/api"
+  : "https://httpapi.com/api";
+const RC_DOMAINCHECK_URL = IS_TEST
+  ? `${RC_BASE_URL}/domains/available.json`
+  : "https://domaincheck.httpapi.com/api/domains/available.json";
+const RC_DNS_URL = `${RC_BASE_URL}/dns`;
 
 // Browser-like headers to reduce WAF/Cloudflare blocking
 const UPSTREAM_HEADERS = {
-  "Accept": "application/json",
-  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  Accept: "application/json",
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
   "Accept-Language": "en-US,en;q=0.9",
   "Cache-Control": "no-cache",
-  "Pragma": "no-cache",
+  Pragma: "no-cache",
 };
 
 /**
@@ -89,7 +96,9 @@ app.post("/domains/available", requireAuth, async (req, res) => {
     tlds.length === 0 ||
     !tlds.every((item) => typeof item === "string" && item.trim())
   ) {
-    return res.status(400).json({ error: "domainNames and tlds must be non-empty arrays of strings" });
+    return res.status(400).json({
+      error: "domainNames and tlds must be non-empty arrays of strings",
+    });
   }
 
   if (!RESELLERCLUB_AUTH_USER_ID || !RESELLERCLUB_API_KEY) {
@@ -113,7 +122,12 @@ app.post("/domains/available", requireAuth, async (req, res) => {
     const contentType = response.headers.get("content-type");
 
     // Log diagnostics for suspicious responses (non-JSON or errors)
-    logUpstreamDiagnostics("/domains/available", response.status, contentType, body);
+    logUpstreamDiagnostics(
+      "/domains/available",
+      response.status,
+      contentType,
+      body,
+    );
 
     if (contentType) {
       res.set("content-type", contentType);
@@ -128,8 +142,14 @@ app.post("/domains/available", requireAuth, async (req, res) => {
 app.get("/domains/suggest", requireAuth, async (req, res) => {
   const keyword = req.query.keyword;
 
-  if (typeof keyword !== "string" || !keyword.trim() || keyword.trim().length < 2) {
-    return res.status(400).json({ error: "keyword must be a string with at least 2 characters" });
+  if (
+    typeof keyword !== "string" ||
+    !keyword.trim() ||
+    keyword.trim().length < 2
+  ) {
+    return res
+      .status(400)
+      .json({ error: "keyword must be a string with at least 2 characters" });
   }
 
   if (!RESELLERCLUB_AUTH_USER_ID || !RESELLERCLUB_API_KEY) {
@@ -140,6 +160,14 @@ app.get("/domains/suggest", requireAuth, async (req, res) => {
   params.append("auth-userid", RESELLERCLUB_AUTH_USER_ID);
   params.append("api-key", RESELLERCLUB_API_KEY);
   params.append("keyword", keyword.trim());
+
+  // Forward optional tlds parameters
+  const tlds = req.query.tlds;
+  if (Array.isArray(tlds)) {
+    tlds.forEach((tld) => params.append("tlds", tld.trim()));
+  } else if (typeof tlds === "string" && tlds.trim()) {
+    params.append("tlds", tlds.trim());
+  }
 
   const url = `${RC_BASE_URL}/domains/v5/suggest-names.json?${params.toString()}`;
 
@@ -152,7 +180,12 @@ app.get("/domains/suggest", requireAuth, async (req, res) => {
     const contentType = response.headers.get("content-type");
 
     // Log diagnostics for suspicious responses (non-JSON or errors)
-    logUpstreamDiagnostics("/domains/suggest", response.status, contentType, body);
+    logUpstreamDiagnostics(
+      "/domains/suggest",
+      response.status,
+      contentType,
+      body,
+    );
 
     if (contentType) {
       res.set("content-type", contentType);
@@ -181,7 +214,19 @@ app.post("/customers/signup", requireAuth, async (req, res) => {
   } = req.body ?? {};
 
   // Validate required fields
-  if (!username || !password || !name || !company || !addressLine1 || !city || !state || !country || !zipcode || !phoneCountryCode || !phone) {
+  if (
+    !username ||
+    !password ||
+    !name ||
+    !company ||
+    !addressLine1 ||
+    !city ||
+    !state ||
+    !country ||
+    !zipcode ||
+    !phoneCountryCode ||
+    !phone
+  ) {
     return res.status(400).json({ error: "All customer fields are required" });
   }
 
@@ -216,7 +261,12 @@ app.post("/customers/signup", requireAuth, async (req, res) => {
     const contentType = response.headers.get("content-type");
 
     // Log diagnostics for suspicious responses (non-JSON or errors)
-    logUpstreamDiagnostics("/customers/signup", response.status, contentType, body);
+    logUpstreamDiagnostics(
+      "/customers/signup",
+      response.status,
+      contentType,
+      body,
+    );
 
     if (contentType) {
       res.set("content-type", contentType);
@@ -234,7 +284,9 @@ app.get("/customers/search", requireAuth, async (req, res) => {
   const status = req.query.status;
 
   if (Number.isNaN(noOfRecords) || Number.isNaN(pageNo)) {
-    return res.status(400).json({ error: "no-of-records and page-no must be numbers" });
+    return res
+      .status(400)
+      .json({ error: "no-of-records and page-no must be numbers" });
   }
 
   if (!RESELLERCLUB_AUTH_USER_ID || !RESELLERCLUB_API_KEY) {
@@ -261,7 +313,12 @@ app.get("/customers/search", requireAuth, async (req, res) => {
     const contentType = response.headers.get("content-type");
 
     // Log diagnostics for suspicious responses (non-JSON or errors)
-    logUpstreamDiagnostics("/customers/search", response.status, contentType, body);
+    logUpstreamDiagnostics(
+      "/customers/search",
+      response.status,
+      contentType,
+      body,
+    );
 
     if (contentType) {
       res.set("content-type", contentType);
@@ -284,7 +341,9 @@ app.get("/customers/details", requireAuth, async (req, res) => {
   const username = req.query.username;
 
   if (!username || typeof username !== "string" || !username.trim()) {
-    return res.status(400).json({ error: "username query parameter is required" });
+    return res
+      .status(400)
+      .json({ error: "username query parameter is required" });
   }
 
   if (!RESELLERCLUB_AUTH_USER_ID || !RESELLERCLUB_API_KEY) {
@@ -306,7 +365,12 @@ app.get("/customers/details", requireAuth, async (req, res) => {
     const body = await response.text();
     const contentType = response.headers.get("content-type");
 
-    logUpstreamDiagnostics("/customers/details", response.status, contentType, body);
+    logUpstreamDiagnostics(
+      "/customers/details",
+      response.status,
+      contentType,
+      body,
+    );
 
     if (contentType) {
       res.set("content-type", contentType);
@@ -344,12 +408,24 @@ app.post("/domains/register", requireAuth, async (req, res) => {
     discountAmount,
   } = req.body ?? {};
 
-  if (!domainName || !customerId || !regContactId || !adminContactId || !techContactId || !billingContactId) {
-    return res.status(400).json({ error: "domainName, customerId, regContactId, adminContactId, techContactId, and billingContactId are required" });
+  if (
+    !domainName ||
+    !customerId ||
+    !regContactId ||
+    !adminContactId ||
+    !techContactId ||
+    !billingContactId
+  ) {
+    return res.status(400).json({
+      error:
+        "domainName, customerId, regContactId, adminContactId, techContactId, and billingContactId are required",
+    });
   }
 
   if (!Array.isArray(nameServers) || nameServers.length === 0) {
-    return res.status(400).json({ error: "nameServers must be a non-empty array" });
+    return res
+      .status(400)
+      .json({ error: "nameServers must be a non-empty array" });
   }
 
   if (!RESELLERCLUB_AUTH_USER_ID || !RESELLERCLUB_API_KEY) {
@@ -372,7 +448,12 @@ app.post("/domains/register", requireAuth, async (req, res) => {
 
   const url = `${RC_BASE_URL}/domains/register.json?${params.toString()}`;
 
-  console.log("[domains/register] Registering domain:", domainName, "for customer:", customerId);
+  console.log(
+    "[domains/register] Registering domain:",
+    domainName,
+    "for customer:",
+    customerId,
+  );
 
   try {
     const response = await fetch(url, {
@@ -382,7 +463,12 @@ app.post("/domains/register", requireAuth, async (req, res) => {
     const body = await response.text();
     const contentType = response.headers.get("content-type");
 
-    logUpstreamDiagnostics("/domains/register", response.status, contentType, body);
+    logUpstreamDiagnostics(
+      "/domains/register",
+      response.status,
+      contentType,
+      body,
+    );
 
     if (contentType) {
       res.set("content-type", contentType);
@@ -422,8 +508,23 @@ app.post("/contacts/add", requireAuth, async (req, res) => {
     type,
   } = req.body ?? {};
 
-  if (!customerId || !name || !company || !email || !addressLine1 || !city || !state || !country || !zipcode || !phoneCountryCode || !phone) {
-    return res.status(400).json({ error: "All contact fields are required (customerId, name, company, email, addressLine1, city, state, country, zipcode, phoneCountryCode, phone)" });
+  if (
+    !customerId ||
+    !name ||
+    !company ||
+    !email ||
+    !addressLine1 ||
+    !city ||
+    !state ||
+    !country ||
+    !zipcode ||
+    !phoneCountryCode ||
+    !phone
+  ) {
+    return res.status(400).json({
+      error:
+        "All contact fields are required (customerId, name, company, email, addressLine1, city, state, country, zipcode, phoneCountryCode, phone)",
+    });
   }
 
   if (!RESELLERCLUB_AUTH_USER_ID || !RESELLERCLUB_API_KEY) {
@@ -487,7 +588,9 @@ app.get("/dns/records", requireAuth, async (req, res) => {
   const domainName = req.query["domain-name"] || req.query.domainName;
 
   if (!domainName || typeof domainName !== "string" || !domainName.trim()) {
-    return res.status(400).json({ error: "domain-name query parameter is required" });
+    return res
+      .status(400)
+      .json({ error: "domain-name query parameter is required" });
   }
 
   if (!RESELLERCLUB_AUTH_USER_ID || !RESELLERCLUB_API_KEY) {
@@ -535,12 +638,30 @@ app.get("/dns/records", requireAuth, async (req, res) => {
  */
 app.post("/contacts/add", requireAuth, async (req, res) => {
   const {
-    customerId, name, company, email,
-    addressLine1, city, state, country, zipcode,
-    phoneCountryCode, phone, type
+    customerId,
+    name,
+    company,
+    email,
+    addressLine1,
+    city,
+    state,
+    country,
+    zipcode,
+    phoneCountryCode,
+    phone,
+    type,
   } = req.body ?? {};
 
-  if (!customerId || !name || !email || !addressLine1 || !city || !country || !zipcode || !phone) {
+  if (
+    !customerId ||
+    !name ||
+    !email ||
+    !addressLine1 ||
+    !city ||
+    !country ||
+    !zipcode ||
+    !phone
+  ) {
     return res.status(400).json({ error: "Missing required contact fields" });
   }
 
@@ -600,13 +721,21 @@ app.post("/contacts/add", requireAuth, async (req, res) => {
  */
 app.post("/domains/register", requireAuth, async (req, res) => {
   const {
-    domainName, years, customerId,
-    regContactId, adminContactId, techContactId, billingContactId,
-    nameServers, invoiceOption
+    domainName,
+    years,
+    customerId,
+    regContactId,
+    adminContactId,
+    techContactId,
+    billingContactId,
+    nameServers,
+    invoiceOption,
   } = req.body ?? {};
 
   if (!domainName || !customerId || !regContactId) {
-    return res.status(400).json({ error: "Missing required fields: domainName, customerId, regContactId" });
+    return res.status(400).json({
+      error: "Missing required fields: domainName, customerId, regContactId",
+    });
   }
 
   if (!RESELLERCLUB_AUTH_USER_ID || !RESELLERCLUB_API_KEY) {
@@ -627,13 +756,18 @@ app.post("/domains/register", requireAuth, async (req, res) => {
 
   // Add nameservers
   const ns = nameServers || ["ns1.dns-parking.com", "ns2.dns-parking.com"];
-  ns.forEach(nameserver => {
+  ns.forEach((nameserver) => {
     params.append("ns", nameserver);
   });
 
   const url = `https://httpapi.com/api/domains/register.json?${params.toString()}`;
 
-  console.log("[domains/register] Registering domain:", domainName, "for customer:", customerId);
+  console.log(
+    "[domains/register] Registering domain:",
+    domainName,
+    "for customer:",
+    customerId,
+  );
 
   try {
     const response = await fetch(url, {
@@ -643,7 +777,12 @@ app.post("/domains/register", requireAuth, async (req, res) => {
     const body = await response.text();
     const contentType = response.headers.get("content-type");
 
-    logUpstreamDiagnostics("/domains/register", response.status, contentType, body);
+    logUpstreamDiagnostics(
+      "/domains/register",
+      response.status,
+      contentType,
+      body,
+    );
 
     if (contentType) {
       res.set("content-type", contentType);
@@ -671,7 +810,9 @@ app.post("/googleapps/order", requireAuth, async (req, res) => {
   const { domainName, customerId, months, noOfAccounts } = req.body ?? {};
 
   if (!domainName || !customerId) {
-    return res.status(400).json({ error: "domainName and customerId are required" });
+    return res
+      .status(400)
+      .json({ error: "domainName and customerId are required" });
   }
 
   if (!RESELLERCLUB_AUTH_USER_ID || !RESELLERCLUB_API_KEY) {
@@ -689,7 +830,12 @@ app.post("/googleapps/order", requireAuth, async (req, res) => {
 
   const url = `${RC_BASE_URL}/gapps/in/add.json?${params.toString()}`;
 
-  console.log("[googleapps/order] Ordering for domain:", domainName, "customerId:", customerId);
+  console.log(
+    "[googleapps/order] Ordering for domain:",
+    domainName,
+    "customerId:",
+    customerId,
+  );
 
   try {
     const response = await fetch(url, {
@@ -700,7 +846,12 @@ app.post("/googleapps/order", requireAuth, async (req, res) => {
     const contentType = response.headers.get("content-type");
 
     // Log diagnostics for suspicious responses (non-JSON or errors)
-    logUpstreamDiagnostics("/googleapps/order", response.status, contentType, body);
+    logUpstreamDiagnostics(
+      "/googleapps/order",
+      response.status,
+      contentType,
+      body,
+    );
 
     if (contentType) {
       res.set("content-type", contentType);
@@ -722,7 +873,9 @@ app.post("/googleapps/add-user", requireAuth, async (req, res) => {
   const { domainName, username, firstName, lastName } = req.body ?? {};
 
   if (!domainName || !username || !firstName || !lastName) {
-    return res.status(400).json({ error: "domainName, username, firstName, and lastName are required" });
+    return res.status(400).json({
+      error: "domainName, username, firstName, and lastName are required",
+    });
   }
 
   if (!RESELLERCLUB_AUTH_USER_ID || !RESELLERCLUB_API_KEY) {
@@ -739,7 +892,12 @@ app.post("/googleapps/add-user", requireAuth, async (req, res) => {
 
   const url = `${RC_BASE_URL}/googleapps/add-user.json?${params.toString()}`;
 
-  console.log("[googleapps/add-user] Creating user:", username, "@", domainName);
+  console.log(
+    "[googleapps/add-user] Creating user:",
+    username,
+    "@",
+    domainName,
+  );
 
   try {
     const response = await fetch(url, {
@@ -750,7 +908,12 @@ app.post("/googleapps/add-user", requireAuth, async (req, res) => {
     const contentType = response.headers.get("content-type");
 
     // Log diagnostics for suspicious responses (non-JSON or errors)
-    logUpstreamDiagnostics("/googleapps/add-user", response.status, contentType, body);
+    logUpstreamDiagnostics(
+      "/googleapps/add-user",
+      response.status,
+      contentType,
+      body,
+    );
 
     if (contentType) {
       res.set("content-type", contentType);
@@ -772,7 +935,9 @@ app.get("/googleapps/details", requireAuth, async (req, res) => {
   const orderId = req.query["order-id"];
 
   if (!orderId) {
-    return res.status(400).json({ error: "order-id query parameter is required" });
+    return res
+      .status(400)
+      .json({ error: "order-id query parameter is required" });
   }
 
   if (!RESELLERCLUB_AUTH_USER_ID || !RESELLERCLUB_API_KEY) {
@@ -794,7 +959,12 @@ app.get("/googleapps/details", requireAuth, async (req, res) => {
     const body = await response.text();
     const contentType = response.headers.get("content-type");
 
-    logUpstreamDiagnostics("/googleapps/details", response.status, contentType, body);
+    logUpstreamDiagnostics(
+      "/googleapps/details",
+      response.status,
+      contentType,
+      body,
+    );
 
     if (contentType) {
       res.set("content-type", contentType);
@@ -815,10 +985,21 @@ app.get("/googleapps/details", requireAuth, async (req, res) => {
  * ResellerClub API: https://httpapi.com/api/gapps/in/admin/add.json
  */
 app.post("/googleapps/admin/add", requireAuth, async (req, res) => {
-  const { orderId, emailAddress, firstName, lastName, alternateEmailAddress, customerName, company, zip } = req.body ?? {};
+  const {
+    orderId,
+    emailAddress,
+    firstName,
+    lastName,
+    alternateEmailAddress,
+    customerName,
+    company,
+    zip,
+  } = req.body ?? {};
 
   if (!orderId || !emailAddress || !firstName || !lastName) {
-    return res.status(400).json({ error: "orderId, emailAddress, firstName, and lastName are required" });
+    return res.status(400).json({
+      error: "orderId, emailAddress, firstName, and lastName are required",
+    });
   }
 
   if (!RESELLERCLUB_AUTH_USER_ID || !RESELLERCLUB_API_KEY) {
@@ -832,14 +1013,22 @@ app.post("/googleapps/admin/add", requireAuth, async (req, res) => {
   params.append("email-address", emailAddress);
   params.append("first-name", firstName);
   params.append("last-name", lastName);
-  params.append("alternate-email-address", alternateEmailAddress || emailAddress);
+  params.append(
+    "alternate-email-address",
+    alternateEmailAddress || emailAddress,
+  );
   params.append("name", customerName || `${firstName} ${lastName}`);
   params.append("company", company || `${firstName} ${lastName}`);
   params.append("zip", zip || "00000");
 
   const url = `${RC_BASE_URL}/gapps/in/admin/add.json?${params.toString()}`;
 
-  console.log("[googleapps/admin/add] Setting up admin for order:", orderId, "email:", emailAddress);
+  console.log(
+    "[googleapps/admin/add] Setting up admin for order:",
+    orderId,
+    "email:",
+    emailAddress,
+  );
 
   try {
     const response = await fetch(url, {
@@ -849,7 +1038,12 @@ app.post("/googleapps/admin/add", requireAuth, async (req, res) => {
     const body = await response.text();
     const contentType = response.headers.get("content-type");
 
-    logUpstreamDiagnostics("/googleapps/admin/add", response.status, contentType, body);
+    logUpstreamDiagnostics(
+      "/googleapps/admin/add",
+      response.status,
+      contentType,
+      body,
+    );
 
     if (contentType) {
       res.set("content-type", contentType);
@@ -921,11 +1115,13 @@ app.post("/dns/manage/add-record", requireAuth, async (req, res) => {
     host,
     value,
     ttl,
-    priority
+    priority,
   } = req.body ?? {};
 
   if (!orderId || !domainName || !recordType || !host || !value) {
-    return res.status(400).json({ error: "order-id, domain-name, record-type, host, and value are required" });
+    return res.status(400).json({
+      error: "order-id, domain-name, record-type, host, and value are required",
+    });
   }
 
   if (!RESELLERCLUB_AUTH_USER_ID || !RESELLERCLUB_API_KEY) {
@@ -957,7 +1153,12 @@ app.post("/dns/manage/add-record", requireAuth, async (req, res) => {
     const body = await response.text();
     const contentType = response.headers.get("content-type");
 
-    logUpstreamDiagnostics("/dns/add-record", response.status, contentType, body);
+    logUpstreamDiagnostics(
+      "/dns/add-record",
+      response.status,
+      contentType,
+      body,
+    );
 
     if (contentType) {
       res.set("content-type", contentType);
@@ -981,7 +1182,9 @@ app.get("/dns/manage/search-records", requireAuth, async (req, res) => {
   const { order_id, domain_name, type } = req.query ?? {};
 
   if (!order_id || !domain_name) {
-    return res.status(400).json({ error: "order_id and domain_name are required" });
+    return res
+      .status(400)
+      .json({ error: "order_id and domain_name are required" });
   }
 
   if (!RESELLERCLUB_AUTH_USER_ID || !RESELLERCLUB_API_KEY) {
@@ -1007,7 +1210,12 @@ app.get("/dns/manage/search-records", requireAuth, async (req, res) => {
       const body = await response.text();
       const contentType = response.headers.get("content-type");
 
-      logUpstreamDiagnostics("/dns/search-records", response.status, contentType, body);
+      logUpstreamDiagnostics(
+        "/dns/search-records",
+        response.status,
+        contentType,
+        body,
+      );
 
       if (contentType) {
         res.set("content-type", contentType);
@@ -1047,14 +1255,17 @@ app.get("/dns/manage/search-records", requireAuth, async (req, res) => {
           const records = JSON.parse(body);
           // ResellerClub returns records as an object keyed by record ID
           if (records && typeof records === "object") {
-            Object.values(records).forEach(record => {
+            Object.values(records).forEach((record) => {
               if (record && typeof record === "object") {
                 allRecords.push(record);
               }
             });
           }
         } catch (parseError) {
-          console.error(`[dns/search-records] Failed to parse ${recordType} records:`, parseError);
+          console.error(
+            `[dns/search-records] Failed to parse ${recordType} records:`,
+            parseError,
+          );
         }
       }
     }
@@ -1071,10 +1282,16 @@ app.get("/dns/manage/search-records", requireAuth, async (req, res) => {
  * Delete a DNS record
  */
 app.post("/dns/manage/delete-record", requireAuth, async (req, res) => {
-  const { "order-id": orderId, "domain-name": domainName, "record-id": recordId } = req.body ?? {};
+  const {
+    "order-id": orderId,
+    "domain-name": domainName,
+    "record-id": recordId,
+  } = req.body ?? {};
 
   if (!orderId || !domainName || !recordId) {
-    return res.status(400).json({ error: "order-id, domain-name, and record-id are required" });
+    return res
+      .status(400)
+      .json({ error: "order-id, domain-name, and record-id are required" });
   }
 
   if (!RESELLERCLUB_AUTH_USER_ID || !RESELLERCLUB_API_KEY) {
@@ -1098,7 +1315,12 @@ app.post("/dns/manage/delete-record", requireAuth, async (req, res) => {
     const body = await response.text();
     const contentType = response.headers.get("content-type");
 
-    logUpstreamDiagnostics("/dns/delete-record", response.status, contentType, body);
+    logUpstreamDiagnostics(
+      "/dns/delete-record",
+      response.status,
+      contentType,
+      body,
+    );
 
     if (contentType) {
       res.set("content-type", contentType);
