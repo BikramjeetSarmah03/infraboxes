@@ -79,10 +79,7 @@ export async function getDomainSuggestions(
     // Use Legacy Proxy if configured
     if (config.proxyUrl && config.proxyToken) {
       const url = `${config.proxyUrl}/domains/suggest?keyword=${encodeURIComponent(cleanKeyword)}`;
-      console.log(`[domains] PROXY REQUEST: ${url}`);
-      console.log(
-        `[domains] TOKEN PREVIEW: ${config.proxyToken.substring(0, 10)}... (length: ${config.proxyToken.length})`,
-      );
+      console.log(`[domains] PROXY REQUEST (Specialized): ${url}`);
 
       response = await fetch(url, {
         method: "GET",
@@ -92,14 +89,11 @@ export async function getDomainSuggestions(
         },
         cache: "no-store",
       });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[domains] Proxy Error (${response.status}):`, errorText);
-      }
     } else {
       if (!config.authUserId || !config.apiKey) {
-        console.error("[domains] Missing ResellerClub credentials");
+        console.error(
+          "[domains] Missing ResellerClub credentials for direct call",
+        );
         return [];
       }
 
@@ -111,6 +105,7 @@ export async function getDomainSuggestions(
 
       SUPPORTED_TLDS.forEach((tld) => params.append("tlds", tld));
       const url = `${SUGGEST_API}?${params.toString()}`;
+      console.log(`[domains] DIRECT REQUEST: ${url}`);
 
       response = await fetch(url, {
         method: "GET",
@@ -119,8 +114,14 @@ export async function getDomainSuggestions(
       });
     }
 
+    console.log({ response });
+
     if (!response.ok) {
-      console.error("[domains] Suggestions API error:", response.status);
+      const errorText = await response.text();
+      console.error(
+        `[domains] Suggestions API error (${response.status}):`,
+        errorText,
+      );
       return [];
     }
 
@@ -146,7 +147,7 @@ export async function getDomainSuggestions(
     //    { "example.com": {}, "example.net": null }
     // 4. An object with a 'response' key containing an array or object of suggestions.
 
-    let itemsToParse: any[] = [];
+    let itemsToParse: (string | Record<string, unknown>)[] = [];
 
     if (Array.isArray(data)) {
       itemsToParse = data;
@@ -165,7 +166,7 @@ export async function getDomainSuggestions(
       }
     }
 
-    itemsToParse.forEach((item: any) => {
+    itemsToParse.forEach((item) => {
       let domainName: string | null = null;
 
       if (typeof item === "string") {
@@ -173,13 +174,14 @@ export async function getDomainSuggestions(
         domainName = item;
       } else if (typeof item === "object" && item !== null) {
         // If item is an object, try to find the domain name within it
-        if (item.domain) {
-          domainName = item.domain;
-        } else if (item.name) {
-          domainName = item.name;
-        } else if (item.fqdn) {
+        const obj = item as Record<string, string>;
+        if (obj.domain) {
+          domainName = obj.domain;
+        } else if (obj.name) {
+          domainName = obj.name;
+        } else if (obj.fqdn) {
           // Fully Qualified Domain Name
-          domainName = item.fqdn;
+          domainName = obj.fqdn;
         }
       }
 
@@ -233,7 +235,7 @@ async function checkChunk(domains: string[]): Promise<DomainAvailability[]> {
 
     if (config.proxyUrl && config.proxyToken) {
       const url = `${config.proxyUrl}/domains/available`;
-      console.log(`[domains] PROXY CHUNK REQUEST: ${url}`);
+      console.log(`[domains] PROXY CHUNK REQUEST (Specialized): ${url}`);
 
       response = await fetch(url, {
         method: "POST",
@@ -245,14 +247,6 @@ async function checkChunk(domains: string[]): Promise<DomainAvailability[]> {
         body: JSON.stringify({ domainNames: slds, tlds }),
         cache: "no-store",
       });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(
-          `[domains] Proxy Chunk Error (${response.status}):`,
-          errorText,
-        );
-      }
     } else {
       if (!config.authUserId || !config.apiKey) return [];
 
@@ -267,7 +261,10 @@ async function checkChunk(domains: string[]): Promise<DomainAvailability[]> {
         params.append("tlds", tld);
       });
 
-      response = await fetch(`${AVAILABILITY_API}?${params.toString()}`, {
+      const url = `${AVAILABILITY_API}?${params.toString()}`;
+      console.log(`[domains] DIRECT CHUNK REQUEST: ${url}`);
+
+      response = await fetch(url, {
         method: "GET",
         headers: COMMON_HEADERS,
         cache: "no-store",
@@ -293,8 +290,21 @@ async function checkChunk(domains: string[]): Promise<DomainAvailability[]> {
   }
 }
 
+interface RCAvailabilityInfo {
+  status: string;
+  costHash?: {
+    register?: string;
+    create?: string;
+    renew?: string;
+  };
+  premium?: boolean;
+}
+
 function parseAvailabilityData(
-  data: any,
+  data:
+    | (Record<string, RCAvailabilityInfo> & { status?: string })
+    | null
+    | undefined,
   requestedDomains: string[],
 ): DomainAvailability[] {
   if (data?.status?.toString().toUpperCase() === "ERROR") {
@@ -306,7 +316,8 @@ function parseAvailabilityData(
   }
 
   // RC returns { "domain.com": { status: "available", ... } }
-  const normalizedData: Record<string, any> = {};
+  // RC returns { "domain.com": { status: "available", ... } }
+  const normalizedData: Record<string, RCAvailabilityInfo> = {};
   if (data && typeof data === "object") {
     Object.keys(data).forEach((key) => {
       normalizedData[key.toLowerCase()] = data[key];

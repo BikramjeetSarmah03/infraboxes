@@ -74,10 +74,10 @@ export function DomainSearchSection() {
         <div className="absolute -inset-1 bg-linear-to-r from-primary/20 to-primary/10 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200"></div>
         <form 
           onSubmit={handleSearch}
-          className="relative flex items-center space-x-4 bg-background/80 backdrop-blur-xl p-2 rounded-xl border border-border shadow-2xl"
+          className="relative flex items-center space-x-4 bg-background/80 backdrop-blur-xl p-4 rounded-xl border border-border shadow-2xl"
         >
           <div className="flex-1 flex items-center pl-4">
-            <Globe className="w-5 h-5 text-muted-foreground mr-3" />
+            <Globe className="w-5 h-5 text-muted-foreground mr-4" />
             <Input 
               placeholder="Enter keyword or business name..." 
               value={keyword}
