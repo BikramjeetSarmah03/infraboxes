@@ -10,6 +10,10 @@ import type {
   DomainSuggestion,
   ResellerClubConfig,
 } from "../domain-types";
+import {
+  DOMAIN_MODIFIERS,
+  SUPPORTED_TLDS,
+} from "../constants/domain-constants";
 
 const config: ResellerClubConfig = {
   authUserId: process.env.RESELLERCLUB_AUTH_USER_ID || "",
@@ -39,25 +43,8 @@ const COMMON_HEADERS = {
   Origin: "https://manage.india.resellerclub.com",
 };
 
-// Supported TLDs
-export const SUPPORTED_TLDS = [
-  "com",
-  // "net",
-  // "org",
-  // "io",
-  // "co",
-  // "info",
-  // "biz",
-  // "us",
-  // "email",
-  // "in",
-  // "me",
-  // "tech",
-  // "online",
-  // "store",
-  // "app",
-  // "dev",
-];
+// Exported constants moved to constants/domain-constants.ts
+export { SUPPORTED_TLDS };
 
 const CHUNK_SIZE = 5;
 
@@ -66,143 +53,39 @@ const CHUNK_SIZE = 5;
  */
 export async function getDomainSuggestions(
   keyword: string,
+  tld: string = "com",
+  page: number = 0,
 ): Promise<DomainSuggestion[]> {
-  try {
-    const cleanKeyword = keyword
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9\s-]/g, "");
-    if (!cleanKeyword || cleanKeyword.length < 2) return [];
+  const cleanKeyword = keyword
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]/g, "");
 
-    let response: Response;
+  if (!cleanKeyword || cleanKeyword.length < 2) return [];
 
-    // Use Legacy Proxy if configured
-    if (config.proxyUrl && config.proxyToken) {
-      const url = `${config.proxyUrl}/domains/suggest?keyword=${encodeURIComponent(cleanKeyword)}`;
-      console.log(`[domains] PROXY REQUEST (Specialized): ${url}`);
+  const suggestions: DomainSuggestion[] = [];
+  const pageSize = 8;
+  const start = page * pageSize;
 
-      response = await fetch(url, {
-        method: "GET",
-        headers: {
-          Accept: "application/json",
-          Authorization: `Bearer ${config.proxyToken}`,
-        },
-        cache: "no-store",
-      });
-    } else {
-      if (!config.authUserId || !config.apiKey) {
-        console.error(
-          "[domains] Missing ResellerClub credentials for direct call",
-        );
-        return [];
-      }
+  const currentModifiers = DOMAIN_MODIFIERS.slice(start, start + pageSize);
 
-      const params = new URLSearchParams({
-        "auth-userid": config.authUserId,
-        "api-key": config.apiKey,
-        keyword: cleanKeyword,
-      });
+  currentModifiers.forEach((mod) => {
+    let sld = cleanKeyword;
 
-      SUPPORTED_TLDS.forEach((tld) => params.append("tlds", tld));
-      const url = `${SUGGEST_API}?${params.toString()}`;
-      console.log(`[domains] DIRECT REQUEST: ${url}`);
-
-      response = await fetch(url, {
-        method: "GET",
-        headers: COMMON_HEADERS,
-        cache: "no-store",
-      });
+    if (mod === "get") {
+      sld = mod + cleanKeyword;
+    } else if (mod !== "") {
+      sld = cleanKeyword + mod;
     }
 
-    console.log({ response });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(
-        `[domains] Suggestions API error (${response.status}):`,
-        errorText,
-      );
-      return [];
-    }
-
-    const data = await response.json();
-    console.log(
-      `[domains] Raw suggestions data for keyword '${cleanKeyword}':`,
-      data,
-    );
-
-    // Check for error payload from ResellerClub (sometimes 200 OK with error body)
-    if (data?.status?.toString().toUpperCase() === "ERROR") {
-      console.error("[domains] RC suggestions error:", data.message);
-      return [];
-    }
-
-    const suggestions: DomainSuggestion[] = [];
-
-    // ResellerClub API can return suggestions in various formats:
-    // 1. An array of strings: ["example.com", "example.net"]
-    // 2. An object where keys are domain names and values are objects:
-    //    { "example.com": { "status": "available" }, "example.net": { "status": "available" } }
-    // 3. An object where keys are domain names and values are just empty objects or null:
-    //    { "example.com": {}, "example.net": null }
-    // 4. An object with a 'response' key containing an array or object of suggestions.
-
-    let itemsToParse: (string | Record<string, unknown>)[] = [];
-
-    if (Array.isArray(data)) {
-      itemsToParse = data;
-    } else if (typeof data === "object" && data !== null) {
-      if (
-        data.response &&
-        (Array.isArray(data.response) || typeof data.response === "object")
-      ) {
-        // Handle case 4: suggestions nested under a 'response' key
-        itemsToParse = Array.isArray(data.response)
-          ? data.response
-          : Object.keys(data.response);
-      } else {
-        // Handle cases 2 and 3: object where keys are domain names
-        itemsToParse = Object.keys(data);
-      }
-    }
-
-    itemsToParse.forEach((item) => {
-      let domainName: string | null = null;
-
-      if (typeof item === "string") {
-        // Case 1: item is directly the domain name (e.g., from an array or Object.keys)
-        domainName = item;
-      } else if (typeof item === "object" && item !== null) {
-        // If item is an object, try to find the domain name within it
-        const obj = item as Record<string, string>;
-        if (obj.domain) {
-          domainName = obj.domain;
-        } else if (obj.name) {
-          domainName = obj.name;
-        } else if (obj.fqdn) {
-          // Fully Qualified Domain Name
-          domainName = obj.fqdn;
-        }
-      }
-
-      if (domainName && domainName.includes(".")) {
-        const parts = domainName.split(".");
-        const tld = parts.pop() || "";
-        const sld = parts.join(".");
-        suggestions.push({ domain: domainName, sld, tld });
-      } else if (domainName) {
-        // If it's a string but doesn't contain a '.', it might be an SLD without TLD
-        // We can choose to ignore these or try to append common TLDs if needed.
-        // For now, we only add fully qualified domain names.
-        console.warn(`[domains] Skipping malformed suggestion: ${domainName}`);
-      }
+    suggestions.push({
+      domain: `${sld}.${tld}`,
+      sld,
+      tld,
     });
+  });
 
-    return suggestions;
-  } catch (error) {
-    console.error("[domains] Suggestion fetch error:", error);
-    return [];
-  }
+  return suggestions;
 }
 
 /**

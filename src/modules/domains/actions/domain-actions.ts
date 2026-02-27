@@ -8,16 +8,22 @@ import type { DomainAvailability } from "../domain-types";
 
 /**
  * Search for domains based on keyword
- * 1. Get suggestions from ResellerClub
+ * 1. Get suggestions locally
  * 2. Rapidly check availability in chunks
  * 3. Return combined results
  */
-export async function searchDomains(keyword: string) {
+export async function searchDomains(
+  keyword: string,
+  tld: string = "com",
+  page: number = 0,
+) {
   try {
-    console.log(`[actions] Searching domains for: "${keyword}"`);
+    console.log(
+      `[actions] Searching domains for: "${keyword}" (tld: ${tld}, page: ${page})`,
+    );
 
     // 1. Get suggestions
-    const suggestions = await getDomainSuggestions(keyword);
+    const suggestions = await getDomainSuggestions(keyword, tld, page);
     if (!suggestions || suggestions.length === 0) {
       return { success: true, domains: [] };
     }
