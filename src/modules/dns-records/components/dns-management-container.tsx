@@ -1,50 +1,19 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { ArrowRight, Filter, Globe, Network, Search } from "lucide-react";
+import { ArrowRight, Filter, Globe, Network, Plus, Search } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
-const domains = [
-  {
-    id: "miraalabs-info",
-    name: "miraalabs.info",
-    status: "pending",
-    message: "DNS not activated",
-  },
-  {
-    id: "miraalabs-com",
-    name: "miraalabs.com",
-    status: "pending",
-    message: "DNS not activated",
-  },
-  {
-    id: "miraalabs-net",
-    name: "miraalabs.net",
-    status: "pending",
-    message: "DNS not activated",
-  },
-  {
-    id: "miraalabs-org",
-    name: "miraalabs.org",
-    status: "active",
-    message: "DNS not activated",
-  },
-  {
-    id: "miraallc-com",
-    name: "miraallc.com",
-    status: "active",
-    message: "DNS activated",
-  },
-];
+// No longer using hardcoded domains
 
-export function DnsManagementContainer() {
+export function DnsManagementContainer({ initialDomains }: { initialDomains: any[] }) {
   const [searchTerm, setSearchTerm] = useState("");
 
-  const filteredDomains = domains.filter((domain) =>
+  const filteredDomains = initialDomains.filter((domain) =>
     domain.name.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
@@ -124,13 +93,14 @@ export function DnsManagementContainer() {
                       <span
                         className={cn(
                           "text-[10px] font-bold uppercase tracking-widest",
-                          domain.status === "active" &&
-                            domain.message === "DNS activated"
+                          domain.isDnsActivated
                             ? "text-zinc-400"
                             : "text-zinc-500",
                         )}
                       >
-                        {domain.message}
+                        {domain.isDnsActivated
+                          ? "DNS activated"
+                          : "DNS not activated"}
                       </span>
                     </div>
                   </div>
@@ -154,21 +124,47 @@ export function DnsManagementContainer() {
             </motion.div>
           ))}
 
-          {filteredDomains.length === 0 && (
+          {initialDomains.length === 0 ? (
+            <div className="py-24 text-center space-y-8 bg-zinc-50/50 dark:bg-zinc-900/30 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl">
+              <div className="size-20 rounded-3xl bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center mx-auto text-zinc-400 border border-zinc-200 dark:border-zinc-800 shadow-sm">
+                <Globe className="size-10" />
+              </div>
+              <div className="space-y-6 max-w-sm mx-auto px-6">
+                <div className="space-y-2">
+                  <h3 className="text-xl font-black text-zinc-900 dark:text-zinc-100 tracking-tight">
+                    No Domains Found
+                  </h3>
+                  <p className="text-sm font-bold text-zinc-500 leading-relaxed">
+                    You haven't registered any domains yet. Purchase your first domain to start managing DNS.
+                  </p>
+                </div>
+                <Link
+                  href="/domains"
+                  className="inline-flex items-center gap-2 px-8 py-3.5 bg-zinc-900 dark:bg-zinc-50 text-zinc-50 dark:text-zinc-900 rounded-xl font-black text-xs uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl shadow-zinc-900/10 dark:shadow-zinc-50/10 group"
+                >
+                  <Plus className="size-4" />
+                  <span>Buy First Domain</span>
+                  <ArrowRight className="size-4 ml-1 transition-transform group-hover:translate-x-1" />
+                </Link>
+              </div>
+            </div>
+          ) : filteredDomains.length === 0 ? (
             <div className="py-20 text-center space-y-4 bg-zinc-50/50 dark:bg-zinc-900/30 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl">
               <div className="size-12 rounded-full bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center mx-auto text-zinc-300">
                 <Search className="size-6" />
               </div>
               <div className="space-y-1">
                 <p className="text-sm font-black text-zinc-900 dark:text-zinc-100">
-                  No domains found
+                  No matching domains
                 </p>
-                <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
+                <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest leading-none mt-1">
                   Try adjusting your search filters
                 </p>
               </div>
             </div>
-          )}
+          ) : null}
+
+
         </div>
       </div>
     </div>

@@ -84,40 +84,54 @@ export function DomainResultsList({ domains, isLoading }: DomainResultsListProps
               </div>
             </div>
 
-            {domain.pricing && domain.status === "available" && (
-              <div className="text-right">
-                <div className="text-2xl font-black text-primary">
-                  ${domain.pricing.register}
+            {domain.status === "available" && (
+              <div className="text-right flex flex-col items-end">
+                <div className="flex items-baseline space-x-1">
+                  <span className="text-sm font-medium text-muted-foreground">$</span>
+                  <span className="text-3xl font-black text-primary tracking-tighter">
+                    {domain.pricing?.register || "0.00"}
+                  </span>
                 </div>
-                <div className="text-xs text-muted-foreground">/yr</div>
+                <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
+                  /year
+                </div>
               </div>
             )}
           </div>
 
-          <div className="mt-6 flex items-center justify-between relative z-10">
-            <div className="text-xs text-muted-foreground italic">
-              {domain.pricing?.renew && `Renews at $${domain.pricing.renew}/yr`}
-            </div>
+          <div className="mt-6 flex flex-col space-y-4 relative z-10">
+            {domain.status === "available" && domain.pricing?.renew && (
+              <div className="flex items-center space-x-2 text-xs text-muted-foreground bg-muted/30 w-fit px-2 py-1 rounded-md">
+                <span className="opacity-60">Renewal:</span>
+                <span className="font-semibold">${domain.pricing.renew}/yr</span>
+              </div>
+            )}
             
-            <Button
-              disabled={domain.status !== "available" || purchasingDomain !== null}
-              size="sm"
-              onClick={() => handlePurchase(domain.domain)}
-              className={`rounded-full px-6 transition-all ${
-                domain.status === "available" 
-                ? "bg-primary hover:bg-primary/90 shadow-md shadow-primary/10" 
-                : "bg-muted cursor-not-allowed text-muted-foreground"
-              }`}
-            >
-              {purchasingDomain === domain.domain ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <>
-                  <ShoppingCart className="w-4 h-4 mr-2" />
-                  {domain.status === "available" ? "Select" : "Taken"}
-                </>
-              )}
-            </Button>
+            <div className="flex items-center justify-between">
+              <div className="text-xs text-muted-foreground font-medium italic">
+                {domain.isPremium && "Includes Premium Registry Fee"}
+              </div>
+              
+              <Button
+                disabled={domain.status !== "available" || purchasingDomain !== null}
+                size="sm"
+                onClick={() => handlePurchase(domain.domain)}
+                className={`rounded-full px-6 transition-all ${
+                  domain.status === "available" 
+                  ? "bg-primary hover:bg-primary/90 shadow-md shadow-primary/10" 
+                  : "bg-muted cursor-not-allowed text-muted-foreground"
+                }`}
+              >
+                {purchasingDomain === domain.domain ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <>
+                    <ShoppingCart className="w-4 h-4 mr-2" />
+                    {domain.status === "available" ? "Select" : "Taken"}
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </motion.div>
       ))}

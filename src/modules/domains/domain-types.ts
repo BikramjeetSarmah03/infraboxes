@@ -28,3 +28,18 @@ export interface ResellerClubConfig {
   proxyUrl?: string;
   proxyToken?: string;
 }
+
+export interface ResellerClubCustomerData {
+  username: string;
+  password?: string;
+  name: string;
+  company: string;
+  addressLine1: string;
+  city: string;
+  state: string;
+  country: string;
+  zipcode: string;
+  phoneCountryCode: string; // e.g., "91"
+  phone: string;
+  langPref?: string;
+}

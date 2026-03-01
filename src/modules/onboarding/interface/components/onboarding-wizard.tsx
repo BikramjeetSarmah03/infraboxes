@@ -51,7 +51,9 @@ const onboardingSchema = z.object({
   companyCategory: z.string().min(2, "Company Category is required."),
   address: z.string().min(5, "Address must be at least 5 characters."),
   country: z.string().min(2, "Country is required."),
+  countryCode: z.string().min(2, "Country Code is required."),
   state: z.string().min(2, "State is required."),
+  stateCode: z.string().min(2, "State Code is required."),
   city: z.string().min(2, "City is required."),
   zip: z.string().min(3, "ZIP/Postal code is required."),
 });
@@ -108,7 +110,9 @@ export function OnboardingWizard({
       companyCategory: "",
       address: "",
       country: "",
+      countryCode: "",
       state: "",
+      stateCode: "",
       city: "",
       zip: "",
     },
@@ -393,11 +397,10 @@ export function OnboardingWizard({
                                         value={country.name}
                                         key={country.isoCode}
                                         onSelect={(_value) => {
-                                          form.setValue(
-                                            "country",
-                                            country.name,
-                                          );
+                                          form.setValue("country", country.name);
+                                          form.setValue("countryCode", country.isoCode);
                                           form.setValue("state", "");
+                                          form.setValue("stateCode", "");
                                           form.setValue("city", "");
                                           setOpenCountry(false);
                                         }}
@@ -460,6 +463,7 @@ export function OnboardingWizard({
                                         key={state.isoCode}
                                         onSelect={(_value) => {
                                           form.setValue("state", state.name);
+                                          form.setValue("stateCode", state.isoCode);
                                           form.setValue("city", "");
                                           setOpenState(false);
                                         }}

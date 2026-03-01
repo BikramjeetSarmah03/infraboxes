@@ -58,3 +58,26 @@ export const SUPPORTED_TLDS = [
   "app",
   "dev",
 ];
+
+/**
+ * ResellerClub Product Key Mapping
+ * Used for fetching TLD-specific pricing.
+ */
+export const TLD_PRODUCT_MAP: Record<string, string> = {
+  com: "domcno",
+  net: "dotnet",
+  org: "domorg",
+  biz: "dombiz",
+  info: "dominfo",
+  us: "domus",
+  in: "dotin",
+  co: "dotco",
+  io: "dotio",
+  tech: "dottech",
+  online: "dotonline",
+  store: "dotstore",
+  app: "dotapp",
+  dev: "dotdev",
+  me: "dotme",
+  email: "dotemail",
+};

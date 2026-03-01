@@ -12,6 +12,8 @@ import {
   SelectTrigger, 
   SelectValue 
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { searchDomains } from "../actions/domain-actions";
 import { DomainResultsList } from "./domain-results-list";
@@ -26,6 +28,11 @@ export function DomainSearchSection() {
   const [hasSearched, setHasSearched] = useState(false);
   const [selectedTld, setSelectedTld] = useState("com");
   const [currentPage, setCurrentPage] = useState(0);
+  const [showTaken, setShowTaken] = useState(false);
+
+  const filteredResults = showTaken 
+    ? results 
+    : results.filter(domain => domain.status === "available");
 
   const handleSearch = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -196,8 +203,48 @@ export function DomainSearchSection() {
             key="results"
             className="pt-8"
           >
+            <div className="flex items-center justify-between mb-6 px-2">
+              <div className="text-sm text-muted-foreground font-medium flex items-center">
+                {results.length > 0 && (
+                  <span className="flex items-center">
+                    Found {results.length} results
+                    <span className="mx-2 opacity-30">•</span>
+                    <span className="text-primary">{filteredResults.length} available</span>
+                  </span>
+                )}
+              </div>
+              
+              {results.length > 0 && (
+                <div className="flex items-center space-x-3 bg-muted/20 px-3 py-1.5 rounded-full border border-border/50">
+                  <Label htmlFor="show-taken" className="text-sm font-semibold cursor-pointer select-none">Show Taken</Label>
+                  <Switch 
+                    id="show-taken"
+                    checked={showTaken} 
+                    onCheckedChange={setShowTaken} 
+                  />
+                </div>
+              )}
+            </div>
+
+            {results.length > 0 && filteredResults.length === 0 && !isSearching && (
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="bg-muted/30 border border-dashed rounded-2xl p-12 text-center"
+              >
+                <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center mx-auto mb-4 opacity-50">
+                  <Search className="w-6 h-6 text-muted-foreground" />
+                </div>
+                <h3 className="text-lg font-semibold mb-2">Better luck next time!</h3>
+                <p className="text-muted-foreground max-w-sm mx-auto">
+                  All suggested domains for this keyword are currently taken. 
+                  Try another keyword or <button onClick={() => setShowTaken(true)} className="text-primary font-semibold hover:underline decoration-2">show taken domains</button>.
+                </p>
+              </motion.div>
+            )}
+
             <DomainResultsList 
-              domains={results} 
+              domains={filteredResults} 
               isLoading={isSearching} 
             />
 

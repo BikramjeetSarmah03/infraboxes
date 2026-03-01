@@ -17,6 +17,7 @@ export const user = pgTable("user", {
   zip: text("zip"),
   scheduledForDeletion: boolean("scheduledForDeletion").default(false),
   deletionScheduledAt: timestamp("deletionScheduledAt"),
+  resellerclubCustomerId: text("resellerclubCustomerId"),
   createdAt: timestamp("createdAt").notNull(),
   updatedAt: timestamp("updatedAt").notNull(),
 });

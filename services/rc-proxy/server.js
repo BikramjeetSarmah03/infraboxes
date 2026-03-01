@@ -139,6 +139,55 @@ app.post("/domains/available", requireAuth, async (req, res) => {
   }
 });
 
+app.get("/products/customer-price", requireAuth, async (req, res) => {
+  if (!RESELLERCLUB_AUTH_USER_ID || !RESELLERCLUB_API_KEY) {
+    return res.status(500).json({ error: "Missing ResellerClub credentials" });
+  }
+
+  const params = new URLSearchParams();
+  params.append("auth-userid", RESELLERCLUB_AUTH_USER_ID);
+  params.append("api-key", RESELLERCLUB_API_KEY);
+
+  // Forward product-key and customer-id if present
+  if (req.query["product-key"]) {
+    const pk = req.query["product-key"];
+    if (Array.isArray(pk)) {
+      pk.forEach((p) => params.append("product-key", p));
+    } else {
+      params.append("product-key", pk);
+    }
+  }
+  if (req.query["customer-id"]) {
+    params.append("customer-id", req.query["customer-id"]);
+  }
+
+  const url = `${RC_BASE_URL}/products/customer-price.json?${params.toString()}`;
+
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: UPSTREAM_HEADERS,
+    });
+    const body = await response.text();
+    const contentType = response.headers.get("content-type");
+
+    logUpstreamDiagnostics(
+      "/products/customer-price",
+      response.status,
+      contentType,
+      body,
+    );
+
+    if (contentType) {
+      res.set("content-type", contentType);
+    }
+
+    res.status(response.status).send(body);
+  } catch (error) {
+    res.status(502).json({ error: "Failed to reach ResellerClub" });
+  }
+});
+
 app.get("/domains/suggest", requireAuth, async (req, res) => {
   const keyword = req.query.keyword;
 

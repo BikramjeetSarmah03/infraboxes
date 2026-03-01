@@ -9,10 +9,12 @@ import type {
   DomainAvailability,
   DomainSuggestion,
   ResellerClubConfig,
+  ResellerClubCustomerData,
 } from "../domain-types";
 import {
   DOMAIN_MODIFIERS,
   SUPPORTED_TLDS,
+  TLD_PRODUCT_MAP,
 } from "../constants/domain-constants";
 
 const config: ResellerClubConfig = {
@@ -47,6 +49,85 @@ const COMMON_HEADERS = {
 export { SUPPORTED_TLDS };
 
 const CHUNK_SIZE = 5;
+
+/**
+ * Base pricing cache to avoid redundant calls
+ */
+let pricingCache: Record<
+  string,
+  Record<string, { register: string; renew: string }>
+> = {};
+
+async function getBasePricing(customerId?: string) {
+  const cacheKey = customerId || "generic";
+  if (pricingCache[cacheKey]) return pricingCache[cacheKey];
+
+  try {
+    let data: any;
+
+    if (config.proxyUrl && config.proxyToken) {
+      const url = new URL(`${config.proxyUrl}/products/customer-price`);
+      Object.values(TLD_PRODUCT_MAP).forEach((pk) =>
+        url.searchParams.append("product-key", pk),
+      );
+      if (customerId) {
+        url.searchParams.append("customer-id", customerId);
+      }
+
+      const response = await fetch(url.toString(), {
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${config.proxyToken}`,
+        },
+      });
+
+      if (!response.ok) return {};
+      data = await response.json();
+    } else {
+      if (!config.authUserId || !config.apiKey) return {};
+
+      const params = new URLSearchParams({
+        "auth-userid": config.authUserId,
+        "api-key": config.apiKey,
+      });
+      Object.values(TLD_PRODUCT_MAP).forEach((pk) =>
+        params.append("product-key", pk),
+      );
+      if (customerId) {
+        params.append("customer-id", customerId);
+      }
+
+      const url = `${BASE_URL}/products/customer-price.json?${params.toString()}`;
+      const response = await fetch(url, { headers: COMMON_HEADERS });
+      if (!response.ok) return {};
+      data = await response.json();
+    }
+
+    const cache: Record<string, { register: string; renew: string }> = {};
+
+    // Map RC product keys back to TLDs
+    const pkToTld = Object.fromEntries(
+      Object.entries(TLD_PRODUCT_MAP).map(([tld, pk]) => [pk, tld]),
+    );
+
+    Object.keys(data).forEach((pk) => {
+      const tld = pkToTld[pk];
+      if (!tld) return;
+
+      const p = data[pk];
+      const register = p.adddomain?.["1"] || "0.00";
+      const renew = p.renewdomain?.["1"] || "0.00";
+
+      cache[tld] = { register, renew };
+    });
+
+    pricingCache[cacheKey] = cache;
+    return cache;
+  } catch (error) {
+    console.error("[domains] Pricing fetch error:", error);
+    return {};
+  }
+}
 
 /**
  * Get domain suggestions based on a keyword
@@ -93,12 +174,13 @@ export async function getDomainSuggestions(
  */
 export async function checkDomainAvailability(
   domains: string[],
+  customerId?: string,
 ): Promise<DomainAvailability[]> {
   const results: DomainAvailability[] = [];
 
   for (let i = 0; i < domains.length; i += CHUNK_SIZE) {
     const chunk = domains.slice(i, i + CHUNK_SIZE);
-    const chunkResults = await checkChunk(chunk);
+    const chunkResults = await checkChunk(chunk, customerId);
     results.push(...chunkResults);
 
     if (i + CHUNK_SIZE < domains.length) {
@@ -109,7 +191,10 @@ export async function checkDomainAvailability(
   return results;
 }
 
-async function checkChunk(domains: string[]): Promise<DomainAvailability[]> {
+async function checkChunk(
+  domains: string[],
+  customerId?: string,
+): Promise<DomainAvailability[]> {
   const slds = [...new Set(domains.map((d) => d.split(".")[0]))];
   const tlds = [...new Set(domains.map((d) => d.split(".").pop() || ""))];
 
@@ -162,7 +247,8 @@ async function checkChunk(domains: string[]): Promise<DomainAvailability[]> {
       }));
 
     const data = await response.json();
-    return parseAvailabilityData(data, domains);
+    const basePricing = await getBasePricing(customerId);
+    return parseAvailabilityData(data, domains, basePricing);
   } catch (error) {
     console.error("[domains] Chunk check error:", error);
     return domains.map((d) => ({
@@ -189,6 +275,7 @@ function parseAvailabilityData(
     | null
     | undefined,
   requestedDomains: string[],
+  basePricing: Record<string, { register: string; renew: string }> = {},
 ): DomainAvailability[] {
   if (data?.status?.toString().toUpperCase() === "ERROR") {
     return requestedDomains.map((d) => ({
@@ -198,8 +285,6 @@ function parseAvailabilityData(
     }));
   }
 
-  // RC returns { "domain.com": { status: "available", ... } }
-  // RC returns { "domain.com": { status: "available", ... } }
   const normalizedData: Record<string, RCAvailabilityInfo> = {};
   if (data && typeof data === "object") {
     Object.keys(data).forEach((key) => {
@@ -217,14 +302,109 @@ function parseAvailabilityData(
     if (status === "available") availability = "available";
     else if (status.includes("reg")) availability = "taken";
 
+    const parts = domain.split(".");
+    const tld = parts.pop() || "";
+    const base = basePricing[tld];
+
     const isPremium = !!info.costHash || !!info.premium;
     const pricing = info.costHash
       ? {
           register: info.costHash.register || info.costHash.create,
           renew: info.costHash.renew,
         }
-      : undefined;
+      : base
+        ? {
+            register: base.register,
+            renew: base.renew,
+          }
+        : undefined;
 
     return { domain, status: availability, isPremium, pricing };
   });
+}
+
+/**
+ * Create a new customer account in ResellerClub
+ */
+export async function createResellerClubCustomer(
+  data: ResellerClubCustomerData,
+): Promise<{ customerId: string; success: boolean; error?: string }> {
+  try {
+    let response: Response;
+
+    const payload = {
+      ...data,
+      password: data.password || "User@123456", // Default secure-ish password if none provided
+      langPref: data.langPref || "en",
+    };
+
+    if (config.proxyUrl && config.proxyToken) {
+      const url = `${config.proxyUrl}/customers/signup`;
+      response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${config.proxyToken}`,
+        },
+        body: JSON.stringify(payload),
+      });
+    } else {
+      if (!config.authUserId || !config.apiKey) {
+        return { customerId: "", success: false, error: "Missing config" };
+      }
+
+      const params = new URLSearchParams({
+        "auth-userid": config.authUserId,
+        "api-key": config.apiKey,
+        username: payload.username,
+        passwd: payload.password,
+        name: payload.name,
+        company: payload.company,
+        "address-line-1": payload.addressLine1,
+        city: payload.city,
+        state: payload.state,
+        country: payload.country,
+        zipcode: payload.zipcode,
+        "phone-cc": payload.phoneCountryCode,
+        phone: payload.phone,
+        "lang-pref": payload.langPref,
+      });
+
+      const url = `${BASE_URL}/customers/v2/signup.json?${params.toString()}`;
+      response = await fetch(url, {
+        method: "POST",
+        headers: COMMON_HEADERS,
+      });
+    }
+
+    const result = await response.text();
+
+    // RC returns customerId as a string if success, or an error object
+    if (response.ok && !isNaN(Number(result.trim()))) {
+      return { customerId: result.trim(), success: true };
+    } else {
+      try {
+        const errorData = JSON.parse(result);
+        return {
+          customerId: "",
+          success: false,
+          error:
+            errorData.message || errorData.error || "Failed to create customer",
+        };
+      } catch {
+        return {
+          customerId: "",
+          success: false,
+          error: result || "Failed to create customer",
+        };
+      }
+    }
+  } catch (error) {
+    console.error("[domains] Create customer error:", error);
+    return {
+      customerId: "",
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
 }
