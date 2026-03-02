@@ -1,10 +1,13 @@
 "use server";
 
-import {
-  getDomainSuggestions,
-  checkDomainAvailability,
-} from "../infrastructure/resellerclub-provider";
 import type { DomainAvailability } from "../domain-types";
+import {
+  checkDomainAvailability,
+  getDomainSuggestions,
+  createResellerClubCustomer,
+  createResellerClubContact,
+  registerDomain,
+} from "../infrastructure/resellerclub-provider";
 
 /**
  * Search for domains based on keyword
@@ -71,14 +74,11 @@ export async function searchDomains(
 }
 
 /**
- * Simulate domain purchase flow
+ * Real domain purchase flow via ResellerClub
  */
-export async function purchaseDomain(domainName: string) {
+export async function purchaseDomain(domainName: string, billingData: any) {
   try {
-    console.log(`[actions] Reserving domain: ${domainName}`);
-
-    // Simulation delay
-    await new Promise((resolve) => setTimeout(resolve, 800));
+    console.log(`[actions] Purchasing domain: ${domainName}`);
 
     const { headers } = await import("next/headers");
     const { auth } = await import("@/modules/auth/infrastructure/auth-server");
@@ -90,17 +90,87 @@ export async function purchaseDomain(domainName: string) {
       throw new Error("Unauthorized");
     }
 
-    const orderId = `sim_${Math.random().toString(36).substring(7)}`;
-
     const { db } = await import("@/shared/infrastructure/database/db-client");
-    const { domain } = await import("@/shared/infrastructure/database/schemas");
+    const { user, domain } =
+      await import("@/shared/infrastructure/database/schemas");
+    const { eq } = await import("drizzle-orm");
 
-    // Save to our DB
+    // 1. Get user details from DB to ensure we have email/phone
+    const userRecord = await db.query.user.findFirst({
+      where: eq(user.id, session.user.id),
+    });
+
+    if (!userRecord) throw new Error("User record not found");
+
+    // 2. Prepare ResellerClub Customer Data
+    // We use session info + billing info from form
+    const rcCustomerData = {
+      username: userRecord.email,
+      name: billingData.name || userRecord.name,
+      company: userRecord.companyName || billingData.name || userRecord.name,
+      addressLine1: billingData.address,
+      city: billingData.city,
+      state: billingData.state,
+      country: billingData.countryCode, // RC needs ISO country code
+      zipcode: billingData.zipcode,
+      phoneCountryCode:
+        userRecord.phoneNumber?.split("-")[0]?.replace("+", "") || "1",
+      phone:
+        userRecord.phoneNumber?.split("-")[1] ||
+        userRecord.phoneNumber?.replace(/[^0-9]/g, "") ||
+        "0000000000",
+      langPref: "en",
+    };
+
+    let customerId = userRecord.resellerclubCustomerId;
+
+    // 3. Create RC Customer if not exists
+    if (!customerId) {
+      const signupResult = await createResellerClubCustomer(rcCustomerData);
+      if (!signupResult.success || !signupResult.customerId) {
+        throw new Error(
+          `Failed to create reseller account: ${signupResult.error}`,
+        );
+      }
+      customerId = signupResult.customerId;
+
+      // Update our local user record
+      await db
+        .update(user)
+        .set({ resellerclubCustomerId: customerId })
+        .where(eq(user.id, session.user.id));
+    }
+
+    // 4. Create Contact for this specific registration
+    const contactResult = await createResellerClubContact(
+      customerId,
+      rcCustomerData,
+    );
+    if (!contactResult.success || !contactResult.contactId) {
+      throw new Error(
+        `Failed to create domain contact: ${contactResult.error}`,
+      );
+    }
+    const contactId = contactResult.contactId;
+
+    // 5. Actually register the domain
+    const regResult = await registerDomain(
+      domainName,
+      customerId,
+      contactId,
+      1,
+    );
+
+    if (!regResult.success || !regResult.orderId) {
+      throw new Error(regResult.error || "Registration failed at ResellerClub");
+    }
+
+    // 6. Save successful registration to our database
     await db.insert(domain).values({
       id: crypto.randomUUID(),
       userId: session.user.id,
       name: domainName,
-      orderId: orderId,
+      orderId: regResult.orderId,
       status: "active",
       isDnsActivated: false,
       createdAt: new Date(),
@@ -109,8 +179,8 @@ export async function purchaseDomain(domainName: string) {
 
     return {
       success: true,
-      message: `Domain ${domainName} has been reserved successfully!`,
-      orderId: orderId,
+      message: `Domain ${domainName} has been registered successfully!`,
+      orderId: regResult.orderId,
     };
   } catch (error) {
     console.error("[actions] purchaseDomain error:", error);

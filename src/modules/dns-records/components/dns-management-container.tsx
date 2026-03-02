@@ -10,7 +10,11 @@ import { cn } from "@/lib/utils";
 
 // No longer using hardcoded domains
 
-export function DnsManagementContainer({ initialDomains }: { initialDomains: any[] }) {
+export function DnsManagementContainer({
+  initialDomains,
+}: {
+  initialDomains: any[];
+}) {
   const [searchTerm, setSearchTerm] = useState("");
 
   const filteredDomains = initialDomains.filter((domain) =>
@@ -21,7 +25,7 @@ export function DnsManagementContainer({ initialDomains }: { initialDomains: any
     <div className="flex flex-col flex-1 w-full">
       {/* Sticky Header */}
       <div className="sticky top-0 z-30 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800">
-        <div className="px-6 md:px-12 h-20 flex items-center justify-between max-w-[1500px] mx-auto w-full">
+        <div className="px-6 md:px-12 h-20 flex items-center justify-between max-w-375 mx-auto w-full">
           <div className="flex items-center gap-5">
             <div className="size-11 rounded-xl bg-zinc-900 dark:bg-zinc-100 flex items-center justify-center text-white dark:text-zinc-900">
               <Network className="size-5" />
@@ -129,13 +133,14 @@ export function DnsManagementContainer({ initialDomains }: { initialDomains: any
               <div className="size-20 rounded-3xl bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center mx-auto text-zinc-400 border border-zinc-200 dark:border-zinc-800 shadow-sm">
                 <Globe className="size-10" />
               </div>
-              <div className="space-y-6 max-w-sm mx-auto px-6">
+              <div className="max-w-375 mx-auto space-y-8">
                 <div className="space-y-2">
                   <h3 className="text-xl font-black text-zinc-900 dark:text-zinc-100 tracking-tight">
                     No Domains Found
                   </h3>
                   <p className="text-sm font-bold text-zinc-500 leading-relaxed">
-                    You haven't registered any domains yet. Purchase your first domain to start managing DNS.
+                    You haven't registered any domains yet. Purchase your first
+                    domain to start managing DNS.
                   </p>
                 </div>
                 <Link
@@ -163,8 +168,6 @@ export function DnsManagementContainer({ initialDomains }: { initialDomains: any
               </div>
             </div>
           ) : null}
-
-
         </div>
       </div>
     </div>

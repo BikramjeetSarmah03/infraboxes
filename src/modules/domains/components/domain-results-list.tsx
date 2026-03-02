@@ -1,43 +1,57 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { CheckCircle2, XCircle, HelpCircle, ShoppingCart, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { purchaseDomain } from "../actions/domain-actions";
-import { toast } from "sonner";
+import {
+  CheckCircle2,
+  HelpCircle,
+  Loader2,
+  ShoppingCart,
+  XCircle,
+} from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { purchaseDomain } from "../actions/domain-actions";
 import type { DomainAvailability } from "../domain-types";
 
 interface DomainResultsListProps {
   domains: DomainAvailability[];
   isLoading: boolean;
+  selectedDomains?: string[];
+  onSelect?: (domain: DomainAvailability) => void;
 }
 
-export function DomainResultsList({ domains, isLoading }: DomainResultsListProps) {
-  const [purchasingDomain, setPurchasingDomain] = useState<string | null>(null);
+export function DomainResultsList({
+  domains,
+  isLoading,
+  selectedDomains = [],
+  onSelect,
+}: DomainResultsListProps) {
+  const [isProcessing, setIsProcessing] = useState<string | null>(null);
 
-  const handlePurchase = async (domainName: string) => {
-    setPurchasingDomain(domainName);
-    try {
-      const result = await purchaseDomain(domainName);
-      if (result.success) {
-        toast.success(result.message);
-      } else {
-        toast.error(result.error);
-      }
-    } catch (error) {
-      toast.error("An unexpected error occurred during purchase");
-    } finally {
-      setPurchasingDomain(null);
+  const handleSelect = (domain: DomainAvailability) => {
+    if (selectedDomains.includes(domain.domain)) return;
+
+    setIsProcessing(domain.domain);
+    if (onSelect) {
+      onSelect(domain);
     }
+    // Brief processing state for visual feedback
+    setTimeout(() => {
+      setIsProcessing(null);
+    }, 400);
   };
 
   if (isLoading) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {[1, 2, 3, 4, 5, 6].map((i) => (
-          <div key={i} className="animate-pulse bg-muted/50 h-24 rounded-xl border border-border" />
+          <div
+            key={i}
+            className="animate-pulse bg-muted/50 h-24 rounded-xl border border-border"
+          />
         ))}
       </div>
     );
@@ -52,86 +66,105 @@ export function DomainResultsList({ domains, isLoading }: DomainResultsListProps
       {domains.map((domain, index) => (
         <motion.div
           key={domain.domain}
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
           transition={{ delay: index * 0.05 }}
-          className="relative group bg-card hover:bg-accent/5 transition-all duration-300 p-6 rounded-2xl border border-border shadow-sm hover:shadow-md h-full flex flex-col justify-between overflow-hidden"
+          className="relative group bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl hover:border-zinc-300 dark:hover:border-zinc-700 transition-all duration-300 p-6 flex flex-col justify-between"
         >
-          {/* Status Background Accent */}
-          <div className={`absolute top-0 right-0 w-32 h-32 -mr-16 -mt-16 rounded-full blur-3xl opacity-10 transition-opacity group-hover:opacity-20 ${
-            domain.status === "available" ? "bg-green-500" : domain.status === "taken" ? "bg-red-500" : "bg-gray-500"
-          }`} />
-
           <div className="flex items-start justify-between relative z-10">
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <div className="flex items-center space-x-2">
-                <h3 className="text-xl font-bold tracking-tight truncate max-w-50 lg:max-w-xs xl:max-w-sm">
+                <h3 className="text-xl font-black tracking-tight text-zinc-900 dark:text-zinc-50 truncate max-w-[200px] sm:max-w-xs">
                   {domain.domain}
                 </h3>
                 {domain.isPremium && (
-                  <Badge variant="secondary" className="bg-amber-100 text-amber-700 hover:bg-amber-100/80 border-amber-200">
+                  <Badge
+                    variant="secondary"
+                    className="bg-zinc-100 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 font-black text-[9px] uppercase tracking-widest border border-zinc-200 dark:border-zinc-800 rounded-md"
+                  >
                     Premium
                   </Badge>
                 )}
               </div>
               <div className="flex items-center space-x-2">
                 <StatusIcon status={domain.status} />
-                <span className={`text-sm font-medium ${
-                  domain.status === "available" ? "text-green-600" : domain.status === "taken" ? "text-red-500" : "text-muted-foreground"
-                }`}>
-                  {domain.status === "available" ? "Available" : domain.status === "taken" ? "Unavailable" : "Status Unknown"}
+                <span
+                  className={`text-[10px] font-bold uppercase tracking-widest ${
+                    domain.status === "available"
+                      ? "text-emerald-500"
+                      : domain.status === "taken"
+                        ? "text-zinc-400"
+                        : "text-zinc-500"
+                  }`}
+                >
+                  {domain.status === "available"
+                    ? "Available"
+                    : domain.status === "taken"
+                      ? "Unavailable"
+                      : "Unknown"}
                 </span>
               </div>
             </div>
 
             {domain.status === "available" && (
-              <div className="text-right flex flex-col items-end">
-                <div className="flex items-baseline space-x-1">
-                  <span className="text-sm font-medium text-muted-foreground">$</span>
-                  <span className="text-3xl font-black text-primary tracking-tighter">
+              <div className="text-right">
+                <div className="flex items-baseline justify-end space-x-0.5">
+                  <span className="text-xs font-black text-zinc-400">$</span>
+                  <span className="text-3xl font-black text-zinc-900 dark:text-zinc-50 tracking-tighter">
                     {domain.pricing?.register || "0.00"}
                   </span>
                 </div>
-                <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
+                <div className="text-[9px] uppercase tracking-[0.2em] text-zinc-400 font-black">
                   /year
                 </div>
               </div>
             )}
           </div>
 
-          <div className="mt-6 flex flex-col space-y-4 relative z-10">
-            {domain.status === "available" && domain.pricing?.renew && (
-              <div className="flex items-center space-x-2 text-xs text-muted-foreground bg-muted/30 w-fit px-2 py-1 rounded-md">
-                <span className="opacity-60">Renewal:</span>
-                <span className="font-semibold">${domain.pricing.renew}/yr</span>
-              </div>
-            )}
-            
-            <div className="flex items-center justify-between">
-              <div className="text-xs text-muted-foreground font-medium italic">
-                {domain.isPremium && "Includes Premium Registry Fee"}
-              </div>
-              
-              <Button
-                disabled={domain.status !== "available" || purchasingDomain !== null}
-                size="sm"
-                onClick={() => handlePurchase(domain.domain)}
-                className={`rounded-full px-6 transition-all ${
-                  domain.status === "available" 
-                  ? "bg-primary hover:bg-primary/90 shadow-md shadow-primary/10" 
-                  : "bg-muted cursor-not-allowed text-muted-foreground"
-                }`}
-              >
-                {purchasingDomain === domain.domain ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <>
-                    <ShoppingCart className="w-4 h-4 mr-2" />
-                    {domain.status === "available" ? "Select" : "Taken"}
-                  </>
-                )}
-              </Button>
+          <div className="mt-8 flex items-center justify-between border-t border-zinc-100 dark:border-zinc-900 pt-6">
+            <div className="space-y-1">
+              {domain.status === "available" && domain.pricing?.renew && (
+                <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest px-2 py-0.5 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-md">
+                  Renewal: ${domain.pricing.renew}/yr
+                </div>
+              )}
             </div>
+
+            <Button
+              disabled={
+                domain.status !== "available" || isProcessing === domain.domain
+              }
+              size="sm"
+              onClick={() => handleSelect(domain)}
+              className={cn(
+                "h-10 px-6 rounded-lg font-black text-[10px] uppercase tracking-widest transition-all shadow-none",
+                domain.status === "available"
+                  ? selectedDomains.includes(domain.domain)
+                    ? "bg-emerald-500 text-white cursor-default"
+                    : "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:scale-[1.02] active:scale-[0.98]"
+                  : "bg-zinc-100 dark:bg-zinc-900 text-zinc-400 cursor-not-allowed",
+              )}
+            >
+              {isProcessing === domain.domain ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <span className="flex items-center gap-2">
+                  {selectedDomains.includes(domain.domain) ? (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      Selected
+                    </>
+                  ) : (
+                    <>
+                      <ShoppingCart className="w-3.5 h-3.5" />
+                      {domain.status === "available"
+                        ? "Select Domain"
+                        : "Not Available"}
+                    </>
+                  )}
+                </span>
+              )}
+            </Button>
           </div>
         </motion.div>
       ))}

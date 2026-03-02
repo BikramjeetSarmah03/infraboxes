@@ -201,7 +201,7 @@ export function OnboardingWizard({
             </div>
           );
         })}
-        <div className="absolute top-6 left-0 w-full h-[2px] bg-zinc-100 dark:bg-zinc-900 -z-0">
+        <div className="absolute top-6 left-0 w-full h-0.5 bg-zinc-100 dark:bg-zinc-900 z-0">
           <motion.div
             className="h-full bg-black dark:bg-white transition-all duration-500"
             initial={{ width: "0%" }}
@@ -211,7 +211,7 @@ export function OnboardingWizard({
       </div>
 
       {/* Form Content */}
-      <div className="min-h-[340px]">
+      <div className="min-h-85">
         <div className="mb-8">
           <h2 className="text-3xl font-bold tracking-tight">
             {STEPS[step].title}
@@ -320,9 +320,9 @@ export function OnboardingWizard({
                                 <span className="text-2xl">
                                   {category.icon}
                                 </span>
-                                <span className="text-xs font-medium">
+                                <div className="flex-1 min-w-0 max-w-37.5">
                                   {category.label}
-                                </span>
+                                </div>
                               </button>
                             ))}
                           </div>
@@ -397,8 +397,14 @@ export function OnboardingWizard({
                                         value={country.name}
                                         key={country.isoCode}
                                         onSelect={(_value) => {
-                                          form.setValue("country", country.name);
-                                          form.setValue("countryCode", country.isoCode);
+                                          form.setValue(
+                                            "country",
+                                            country.name,
+                                          );
+                                          form.setValue(
+                                            "countryCode",
+                                            country.isoCode,
+                                          );
                                           form.setValue("state", "");
                                           form.setValue("stateCode", "");
                                           form.setValue("city", "");
@@ -463,7 +469,10 @@ export function OnboardingWizard({
                                         key={state.isoCode}
                                         onSelect={(_value) => {
                                           form.setValue("state", state.name);
-                                          form.setValue("stateCode", state.isoCode);
+                                          form.setValue(
+                                            "stateCode",
+                                            state.isoCode,
+                                          );
                                           form.setValue("city", "");
                                           setOpenState(false);
                                         }}

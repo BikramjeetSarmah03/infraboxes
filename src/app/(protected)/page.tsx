@@ -12,6 +12,7 @@ import { redirect } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { auth } from "@/modules/auth/infrastructure/auth-server";
+import { getDashboardStats } from "@/modules/dashboard/actions/dashboard-actions";
 
 export default async function Home() {
   const session = await auth.api.getSession({
@@ -25,6 +26,11 @@ export default async function Home() {
   if (!session.user.isAccountSetuped) {
     redirect("/onboarding");
   }
+
+  const dashboardData = await getDashboardStats();
+  const stats = dashboardData.success && dashboardData.stats ? dashboardData.stats : { totalDomains: 0, totalMailboxes: 0, activeMailboxes: 0 };
+  const recentDomains = dashboardData.success && dashboardData.recentDomains ? dashboardData.recentDomains : [];
+  const recentMailboxes = dashboardData.success && dashboardData.recentMailboxes ? dashboardData.recentMailboxes : [];
 
   return (
     <div className="w-full h-full flex-1 relative overflow-hidden bg-zinc-50/50 dark:bg-black">
@@ -54,7 +60,7 @@ export default async function Home() {
                 Total Domains
               </span>
               <span className="text-3xl font-bold text-zinc-900 dark:text-zinc-50 tracking-tight">
-                5
+                {stats.totalDomains}
               </span>
             </div>
             <div className="size-12 rounded-2xl bg-linear-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-500/20 flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300">
@@ -72,7 +78,7 @@ export default async function Home() {
                 Total Mailboxes
               </span>
               <span className="text-3xl font-bold text-zinc-900 dark:text-zinc-50 tracking-tight">
-                0
+                {stats.totalMailboxes}
               </span>
             </div>
             <div className="size-12 rounded-2xl bg-linear-to-br from-purple-500 to-pink-600 shadow-lg shadow-purple-500/20 flex items-center justify-center group-hover:scale-110 group-hover:-rotate-3 transition-all duration-300">
@@ -90,7 +96,7 @@ export default async function Home() {
                 Active Mailboxes
               </span>
               <span className="text-3xl font-bold text-zinc-900 dark:text-zinc-50 tracking-tight">
-                0
+                {stats.activeMailboxes}
               </span>
             </div>
             <div className="size-12 rounded-2xl bg-linear-to-br from-emerald-400 to-teal-500 shadow-lg shadow-emerald-500/20 flex items-center justify-center group-hover:scale-110 group-hover:rotate-6 transition-all duration-300">
@@ -109,7 +115,7 @@ export default async function Home() {
             <div className="h-px bg-zinc-200 dark:bg-zinc-800 flex-1 ml-2" />
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="relative overflow-hidden bg-linear-to-br from-zinc-900 to-zinc-800 dark:from-zinc-100 dark:to-zinc-300 border-none rounded-[1.5rem] p-6 shadow-xl shadow-zinc-900/10 group hover:-translate-y-1 transition-all duration-500 cursor-pointer">
+            <Link href="/domains" className="relative overflow-hidden bg-linear-to-br from-zinc-900 to-zinc-800 dark:from-zinc-100 dark:to-zinc-300 border-none rounded-[1.5rem] p-6 shadow-xl shadow-zinc-900/10 group hover:-translate-y-1 transition-all duration-500 cursor-pointer block">
               <div className="absolute top-0 right-0 p-6 opacity-20 group-hover:opacity-40 transition-all duration-500 group-hover:scale-125 transform origin-top-right">
                 <Globe className="size-24 text-white dark:text-black" />
               </div>
@@ -124,13 +130,13 @@ export default async function Home() {
                   securely.
                 </p>
               </div>
-              <Button className="relative z-10 bg-white text-zinc-900 hover:bg-zinc-100 dark:bg-zinc-900 dark:text-white dark:hover:bg-zinc-800 text-sm h-10 px-6 rounded-lg font-semibold transition-transform active:scale-95 shadow-md">
+              <Button className="relative z-10 bg-white text-zinc-900 hover:bg-zinc-100 dark:bg-zinc-900 dark:text-white dark:hover:bg-zinc-800 text-sm h-10 px-6 rounded-lg font-semibold transition-transform active:scale-95 shadow-md pointer-events-none">
                 Get Started{" "}
                 <ArrowRight className="ml-2 size-4 transition-transform group-hover:translate-x-1" />
               </Button>
-            </div>
+            </Link>
 
-            <div className="relative bg-white/80 dark:bg-zinc-950/80 backdrop-blur-xl border border-zinc-200/60 dark:border-zinc-800/60 rounded-[1.5rem] p-6 shadow-[0_2px_20px_-8px_rgba(0,0,0,0.05)] group hover:shadow-[0_8px_30px_-12px_rgba(0,0,0,0.1)] hover:-translate-y-1 transition-all duration-500 cursor-pointer hover:border-zinc-300/80 dark:hover:border-zinc-700/80">
+            <Link href="/mailboxes/all" className="relative bg-white/80 dark:bg-zinc-950/80 backdrop-blur-xl border border-zinc-200/60 dark:border-zinc-800/60 rounded-[1.5rem] p-6 shadow-[0_2px_20px_-8px_rgba(0,0,0,0.05)] group hover:shadow-[0_8px_30px_-12px_rgba(0,0,0,0.1)] hover:-translate-y-1 transition-all duration-500 cursor-pointer hover:border-zinc-300/80 dark:hover:border-zinc-700/80 block">
               <div className="absolute top-0 right-0 p-6 opacity-[0.03] dark:opacity-[0.02] group-hover:opacity-10 transition-all duration-500 group-hover:scale-125 transform origin-top-right">
                 <Mail className="size-24 text-zinc-900 dark:text-white" />
               </div>
@@ -146,12 +152,12 @@ export default async function Home() {
               </div>
               <Button
                 variant="outline"
-                className="relative z-10 border-zinc-200 dark:border-zinc-800 bg-transparent hover:bg-zinc-100 dark:hover:bg-zinc-900 text-sm h-10 px-6 rounded-lg font-semibold transition-all active:scale-95 group-hover:border-zinc-300 dark:group-hover:border-zinc-700"
+                className="relative z-10 border-zinc-200 dark:border-zinc-800 bg-transparent hover:bg-zinc-100 dark:hover:bg-zinc-900 text-sm h-10 px-6 rounded-lg font-semibold transition-all active:scale-95 group-hover:border-zinc-300 dark:group-hover:border-zinc-700 pointer-events-none"
               >
                 Create Mailbox{" "}
                 <ArrowRight className="ml-2 size-4 transition-transform group-hover:translate-x-1" />
               </Button>
-            </div>
+            </Link>
           </div>
         </div>
 
@@ -173,10 +179,32 @@ export default async function Home() {
                 View all
               </Link>
             </div>
-            <div className="flex-1 flex flex-col justify-center items-center py-10 gap-2 text-zinc-400 dark:text-zinc-600">
-              <MailOpen className="size-8 stroke-[1.5]" />
-              <p className="text-xs font-medium">No mailboxes yet</p>
-            </div>
+            {recentMailboxes.length > 0 ? (
+              <div className="flex flex-col">
+                {recentMailboxes.map((mailbox, i, arr) => (
+                  <div
+                    key={mailbox.id}
+                    className={`flex items-center justify-between p-3.5 px-5 hover:bg-zinc-50/80 dark:hover:bg-zinc-900/30 transition-all duration-300 cursor-pointer group ${i !== arr.length - 1 ? "border-b border-zinc-100/50 dark:border-zinc-900/50" : ""}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="size-9 rounded-xl bg-purple-50 dark:bg-purple-900/10 flex items-center justify-center shrink-0 group-hover:scale-110 group-hover:bg-white dark:group-hover:bg-zinc-800 transition-all duration-300 shadow-sm border border-purple-200/40 dark:border-purple-800/40">
+                        <Mail className="size-4 text-purple-500" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="font-medium text-sm text-zinc-900 dark:text-zinc-50">
+                          {mailbox.username}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col justify-center items-center py-10 gap-2 text-zinc-400 dark:text-zinc-600">
+                <MailOpen className="size-8 stroke-[1.5]" />
+                <p className="text-xs font-medium">No mailboxes yet</p>
+              </div>
+            )}
           </div>
 
           {/* Your Domains */}
@@ -194,41 +222,43 @@ export default async function Home() {
             </div>
 
             <div className="flex flex-col">
-              {[
-                { name: "miraallc.com", status: "active" },
-                { name: "miraalabs.org", status: "active" },
-                { name: "miraalabs.net", status: "dns_pending" },
-                { name: "miraalabs.com", status: "dns_pending" },
-                { name: "miraalabs.info", status: "dns_pending" },
-              ].map((domain, i, arr) => (
-                <div
-                  key={domain.name}
-                  className={`flex items-center justify-between p-3.5 px-5 hover:bg-zinc-50/80 dark:hover:bg-zinc-900/30 transition-all duration-300 cursor-pointer group ${i !== arr.length - 1 ? "border-b border-zinc-100/50 dark:border-zinc-900/50" : ""}`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="size-9 rounded-xl bg-zinc-100/80 dark:bg-zinc-900/80 flex items-center justify-center shrink-0 group-hover:scale-110 group-hover:bg-white dark:group-hover:bg-zinc-800 transition-all duration-300 shadow-sm border border-zinc-200/40 dark:border-zinc-800/40">
-                      <Globe className="size-4 text-zinc-500 group-hover:text-blue-500 transition-colors" />
-                    </div>
-                    <div className="flex flex-col">
-                      <span className="font-medium text-sm text-zinc-900 dark:text-zinc-50">
-                        {domain.name}
-                      </span>
-                    </div>
-                  </div>
-                  <Badge
-                    variant={
-                      domain.status === "active" ? "default" : "secondary"
-                    }
-                    className={
-                      domain.status === "active"
-                        ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:hover:bg-emerald-500/20 border-emerald-200 dark:border-emerald-500/20 shadow-none font-medium text-[10px] px-1.5 py-0 leading-none h-5 rounded hover:scale-105 transition-transform uppercase"
-                        : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700 shadow-none font-medium text-[10px] px-1.5 py-0 leading-none h-5 rounded hover:scale-105 transition-transform uppercase"
-                    }
+              {recentDomains.length > 0 ? (
+                recentDomains.map((domain, i, arr) => (
+                  <Link
+                    href={`/dns-records/${domain.id}`}
+                    key={domain.id}
+                    className={`flex items-center justify-between p-3.5 px-5 hover:bg-zinc-50/80 dark:hover:bg-zinc-900/30 transition-all duration-300 cursor-pointer group ${i !== arr.length - 1 ? "border-b border-zinc-100/50 dark:border-zinc-900/50" : ""}`}
                   >
-                    {domain.status.replace("_", " ")}
-                  </Badge>
+                    <div className="flex items-center gap-3">
+                      <div className="size-9 rounded-xl bg-zinc-100/80 dark:bg-zinc-900/80 flex items-center justify-center shrink-0 group-hover:scale-110 group-hover:bg-white dark:group-hover:bg-zinc-800 transition-all duration-300 shadow-sm border border-zinc-200/40 dark:border-zinc-800/40">
+                        <Globe className="size-4 text-zinc-500 group-hover:text-blue-500 transition-colors" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="font-medium text-sm text-zinc-900 dark:text-zinc-50">
+                          {domain.name}
+                        </span>
+                      </div>
+                    </div>
+                    <Badge
+                      variant={
+                        domain.status === "active" ? "default" : "secondary"
+                      }
+                      className={
+                        domain.status === "active"
+                          ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:hover:bg-emerald-500/20 border-emerald-200 dark:border-emerald-500/20 shadow-none font-medium text-[10px] px-1.5 py-0 leading-none h-5 rounded hover:scale-105 transition-transform uppercase"
+                          : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700 shadow-none font-medium text-[10px] px-1.5 py-0 leading-none h-5 rounded hover:scale-105 transition-transform uppercase"
+                      }
+                    >
+                      {domain.status.replace("_", " ")}
+                    </Badge>
+                  </Link>
+                ))
+              ) : (
+                <div className="flex-1 flex flex-col justify-center items-center py-10 gap-2 text-zinc-400 dark:text-zinc-600 border-t border-zinc-100 dark:border-zinc-900">
+                  <Globe className="size-8 stroke-[1.5]" />
+                  <p className="text-xs font-medium">No domains yet</p>
                 </div>
-              ))}
+              )}
             </div>
           </div>
         </div>

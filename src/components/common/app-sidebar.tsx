@@ -8,9 +8,11 @@ import {
   Network,
   Package,
   Settings2,
+  Loader2,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   Sidebar,
   SidebarContent,
@@ -29,6 +31,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { NavUser } from "./nav-user";
+import { getDashboardStats } from "@/modules/dashboard/actions/dashboard-actions";
 
 const navItems = [
   {
@@ -70,6 +73,27 @@ const navItems = [
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname();
+  const [stats, setStats] = useState({ totalDomains: 0, totalMailboxes: 0 });
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchStats() {
+      try {
+        const res = await getDashboardStats();
+        if (res.success && res.stats) {
+          setStats({
+            totalDomains: res.stats.totalDomains,
+            totalMailboxes: res.stats.totalMailboxes,
+          });
+        }
+      } catch (error) {
+        console.error("Failed to fetch sidebar stats:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    fetchStats();
+  }, []);
 
   return (
     <Sidebar collapsible="icon" {...props}>
@@ -130,54 +154,68 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarFooter className="border-t border-sidebar-border py-2 gap-2">
         {/* Expanded View */}
         <div className="mx-2 flex group-data-[collapsible=icon]:hidden items-center justify-between rounded-lg border border-zinc-300 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-900 mt-2">
-          <div className="flex flex-col gap-0.5">
-            <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-50">
-              Domains
-            </span>
-            <span className="text-[10px] text-zinc-500 font-medium">
-              5 Active
-            </span>
-          </div>
-          <div className="w-px h-6 bg-zinc-300 dark:bg-zinc-700 mx-2"></div>
-          <div className="flex flex-col gap-0.5 items-end text-right">
-            <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-50">
-              Mailboxes
-            </span>
-            <span className="text-[10px] text-zinc-500 font-medium">
-              0 Active
-            </span>
-          </div>
+          {isLoading ? (
+            <div className="flex items-center justify-center w-full py-1">
+              <Loader2 className="size-3 animate-spin text-zinc-400" />
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-50">
+                  Domains
+                </span>
+                <span className="text-[10px] text-zinc-500 font-medium uppercase tracking-tight">
+                  {stats.totalDomains} Active
+                </span>
+              </div>
+              <div className="w-px h-6 bg-zinc-300 dark:bg-zinc-700 mx-2"></div>
+              <div className="flex flex-col gap-0.5 items-end text-right">
+                <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-50">
+                  Mailboxes
+                </span>
+                <span className="text-[10px] text-zinc-500 font-medium uppercase tracking-tight">
+                  {stats.totalMailboxes} Active
+                </span>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Collapsed View */}
-        <div className="hidden group-data-[collapsible=icon]:flex flex-col items-center justify-center gap-4 mt-2">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="flex flex-col items-center gap-1 cursor-pointer">
-                <span className="text-xs font-bold text-zinc-900 dark:text-zinc-50 leading-none">
-                  5
-                </span>
-                <Globe className="size-4 text-zinc-500" />
-              </div>
-            </TooltipTrigger>
-            <TooltipContent side="right">
-              <p>5 Active Domains</p>
-            </TooltipContent>
-          </Tooltip>
+        <div className="hidden group-data-[collapsible=icon]:flex flex-col items-center justify-center gap-4 mt-2 py-2">
+          {isLoading ? (
+            <Loader2 className="size-4 animate-spin text-zinc-400" />
+          ) : (
+            <>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex flex-col items-center gap-1 cursor-pointer">
+                    <span className="text-[10px] font-bold text-zinc-900 dark:text-zinc-50 leading-none">
+                      {stats.totalDomains}
+                    </span>
+                    <Globe className="size-4 text-zinc-500" />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  <p className="text-[10px] uppercase font-bold tracking-tight">{stats.totalDomains} Active Domains</p>
+                </TooltipContent>
+              </Tooltip>
 
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="flex flex-col items-center gap-1 cursor-pointer">
-                <span className="text-xs font-bold text-zinc-900 dark:text-zinc-50 leading-none">
-                  0
-                </span>
-                <Mailbox className="size-4 text-zinc-500" />
-              </div>
-            </TooltipTrigger>
-            <TooltipContent side="right">
-              <p>0 Active Mailboxes</p>
-            </TooltipContent>
-          </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex flex-col items-center gap-1 cursor-pointer">
+                    <span className="text-[10px] font-bold text-zinc-900 dark:text-zinc-50 leading-none">
+                      {stats.totalMailboxes}
+                    </span>
+                    <Mailbox className="size-4 text-zinc-500" />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  <p className="text-[10px] uppercase font-bold tracking-tight">{stats.totalMailboxes} Active Mailboxes</p>
+                </TooltipContent>
+              </Tooltip>
+            </>
+          )}
         </div>
 
         <NavUser />

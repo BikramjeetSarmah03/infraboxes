@@ -3,9 +3,9 @@
 import { eq } from "drizzle-orm";
 import { headers } from "next/headers";
 import { auth } from "@/modules/auth/infrastructure/auth-server";
+import { createResellerClubCustomer } from "@/modules/domains/infrastructure/resellerclub-provider";
 import { db } from "@/shared/infrastructure/database/db-client";
 import * as schema from "@/shared/infrastructure/database/schemas";
-import { createResellerClubCustomer } from "@/modules/domains/infrastructure/resellerclub-provider";
 
 export async function submitOnboarding(data: {
   name?: string;

@@ -5,17 +5,17 @@
  * All operations are performed server-side.
  */
 
+import {
+  DOMAIN_MODIFIERS,
+  SUPPORTED_TLDS,
+  TLD_PRODUCT_MAP,
+} from "../constants/domain-constants";
 import type {
   DomainAvailability,
   DomainSuggestion,
   ResellerClubConfig,
   ResellerClubCustomerData,
 } from "../domain-types";
-import {
-  DOMAIN_MODIFIERS,
-  SUPPORTED_TLDS,
-  TLD_PRODUCT_MAP,
-} from "../constants/domain-constants";
 
 const config: ResellerClubConfig = {
   authUserId: process.env.RESELLERCLUB_AUTH_USER_ID || "",
@@ -53,7 +53,7 @@ const CHUNK_SIZE = 5;
 /**
  * Base pricing cache to avoid redundant calls
  */
-let pricingCache: Record<
+const pricingCache: Record<
   string,
   Record<string, { register: string; renew: string }>
 > = {};
@@ -403,6 +403,383 @@ export async function createResellerClubCustomer(
     console.error("[domains] Create customer error:", error);
     return {
       customerId: "",
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+/**
+ * Create a contact for a ResellerClub customer
+ */
+export async function createResellerClubContact(
+  customerId: string,
+  data: ResellerClubCustomerData,
+): Promise<{ contactId: string; success: boolean; error?: string }> {
+  try {
+    let response: Response;
+
+    const payload = {
+      ...data,
+      "customer-id": customerId,
+      type: "Contact",
+    };
+
+    if (config.proxyUrl && config.proxyToken) {
+      const url = `${config.proxyUrl}/contacts/add`;
+      response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${config.proxyToken}`,
+        },
+        body: JSON.stringify(payload),
+      });
+    } else {
+      if (!config.authUserId || !config.apiKey) {
+        return { contactId: "", success: false, error: "Missing config" };
+      }
+
+      const params = new URLSearchParams({
+        "auth-userid": config.authUserId,
+        "api-key": config.apiKey,
+        "customer-id": customerId,
+        name: data.name,
+        company: data.company,
+        email: data.username,
+        "address-line-1": data.addressLine1,
+        city: data.city,
+        state: data.state,
+        country: data.country,
+        zipcode: data.zipcode,
+        "phone-cc": data.phoneCountryCode,
+        phone: data.phone,
+        type: "Contact",
+      });
+
+      const url = `${BASE_URL}/contacts/add.json?${params.toString()}`;
+      response = await fetch(url, {
+        method: "POST",
+        headers: COMMON_HEADERS,
+      });
+    }
+
+    const result = await response.text();
+
+    if (response.ok && !isNaN(Number(result.trim()))) {
+      return { contactId: result.trim(), success: true };
+    } else {
+      try {
+        const errorData = JSON.parse(result);
+        return {
+          contactId: "",
+          success: false,
+          error:
+            errorData.message || errorData.error || "Failed to create contact",
+        };
+      } catch {
+        return {
+          contactId: "",
+          success: false,
+          error: result || "Failed to create contact",
+        };
+      }
+    }
+  } catch (error) {
+    console.error("[domains] Create contact error:", error);
+    return {
+      contactId: "",
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+/**
+ * Register a domain in ResellerClub
+ */
+export async function registerDomain(
+  domainName: string,
+  customerId: string,
+  contactId: string,
+  years: number = 1,
+): Promise<{ success: boolean; orderId?: string; error?: string }> {
+  try {
+    let response: Response;
+
+    if (config.proxyUrl && config.proxyToken) {
+      const url = `${config.proxyUrl}/domains/register`;
+      response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${config.proxyToken}`,
+        },
+        body: JSON.stringify({
+          domainName,
+          customerId,
+          regContactId: contactId,
+          adminContactId: contactId,
+          techContactId: contactId,
+          billingContactId: contactId,
+          years,
+          ns: ["ns1.infraboxes.com", "ns2.infraboxes.com"], // Generic nameservers
+          invoiceOption: "KeepInvoice",
+        }),
+      });
+    } else {
+      if (!config.authUserId || !config.apiKey) {
+        return { success: false, error: "Missing config" };
+      }
+
+      const params = new URLSearchParams({
+        "auth-userid": config.authUserId,
+        "api-key": config.apiKey,
+        "domain-name": domainName,
+        years: years.toString(),
+        ns: "ns1.infraboxes.com", // Add first NS
+        "customer-id": customerId,
+        "reg-contact-id": contactId,
+        "admin-contact-id": contactId,
+        "tech-contact-id": contactId,
+        "billing-contact-id": contactId,
+        "invoice-option": "KeepInvoice",
+      });
+      // Append second NS
+      params.append("ns", "ns2.infraboxes.com");
+
+      const url = `${BASE_URL}/domains/register.json?${params.toString()}`;
+      response = await fetch(url, {
+        method: "POST",
+        headers: COMMON_HEADERS,
+      });
+    }
+
+    const result = await response.json();
+
+    if (response.ok && (result.status === "Success" || result.entityid)) {
+      return {
+        success: true,
+        orderId: result.entityid?.toString() || result.actionid?.toString(),
+      };
+    } else {
+      return {
+        success: false,
+        error: result.message || result.error || "Domain registration failed",
+      };
+    }
+  } catch (error) {
+    console.error("[domains] Register domain error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+/**
+ * List DNS records for a domain in ResellerClub
+ */
+export async function listDnsRecords(
+  domainName: string,
+): Promise<{ success: boolean; records?: any[]; error?: string }> {
+  try {
+    let response: Response;
+
+    if (config.proxyUrl && config.proxyToken) {
+      const url = `${config.proxyUrl}/dns/records/search?domainName=${domainName}`;
+      response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${config.proxyToken}`,
+        },
+      });
+    } else {
+      if (!config.authUserId || !config.apiKey) {
+        return { success: false, error: "Missing config" };
+      }
+
+      const params = new URLSearchParams({
+        "auth-userid": config.authUserId,
+        "api-key": config.apiKey,
+        "domain-name": domainName,
+      });
+
+      const url = `${BASE_URL}/dns/manage/search-records.json?${params.toString()}`;
+      response = await fetch(url, { headers: COMMON_HEADERS });
+    }
+
+    const result = await response.json();
+
+    if (response.ok) {
+      // Result is usually an array or an object with records
+      return { success: true, records: Array.isArray(result) ? result : [] };
+    } else {
+      return {
+        success: false,
+        error: result.message || result.error || "Failed to list DNS records",
+      };
+    }
+  } catch (error) {
+    console.error("[domains] List DNS records error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+/**
+ * Add a DNS record in ResellerClub
+ */
+export async function addDnsRecord(
+  domainName: string,
+  type: string,
+  host: string,
+  value: string,
+  ttl: number = 3600,
+  priority?: number,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    let response: Response;
+
+    // Map common types to RC endpoints
+    const typeMap: Record<string, string> = {
+      A: "add-ipv4-record",
+      AAAA: "add-ipv6-record",
+      MX: "add-mx-record",
+      CNAME: "add-cname-record",
+      TXT: "add-txt-record",
+      NS: "add-ns-record",
+      SRV: "add-srv-record",
+    };
+
+    const endpoint = typeMap[type.toUpperCase()];
+    if (!endpoint)
+      return { success: false, error: `Unsupported record type: ${type}` };
+
+    if (config.proxyUrl && config.proxyToken) {
+      const url = `${config.proxyUrl}/dns/records/add`;
+      response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${config.proxyToken}`,
+        },
+        body: JSON.stringify({ domainName, type, host, value, ttl, priority }),
+      });
+    } else {
+      if (!config.authUserId || !config.apiKey) {
+        return { success: false, error: "Missing config" };
+      }
+
+      const params = new URLSearchParams({
+        "auth-userid": config.authUserId,
+        "api-key": config.apiKey,
+        "domain-name": domainName,
+        host: host === "@" ? "" : host,
+        value: value,
+        ttl: ttl.toString(),
+      });
+
+      if (priority !== undefined) {
+        params.append("priority", priority.toString());
+      }
+
+      const url = `${BASE_URL}/dns/manage/${endpoint}.json?${params.toString()}`;
+      response = await fetch(url, {
+        method: "POST",
+        headers: COMMON_HEADERS,
+      });
+    }
+
+    const result = await response.json();
+
+    if (response.ok && result.status === "Success") {
+      return { success: true };
+    } else {
+      return {
+        success: false,
+        error: result.message || result.error || "Failed to add DNS record",
+      };
+    }
+  } catch (error) {
+    console.error("[domains] Add DNS record error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+/**
+ * Delete a DNS record in ResellerClub
+ */
+export async function deleteDnsRecord(
+  domainName: string,
+  type: string,
+  host: string,
+  value: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    let response: Response;
+
+    const typeMap: Record<string, string> = {
+      A: "delete-ipv4-record",
+      AAAA: "delete-ipv6-record",
+      MX: "delete-mx-record",
+      CNAME: "delete-cname-record",
+      TXT: "delete-txt-record",
+      NS: "delete-ns-record",
+      SRV: "delete-srv-record",
+    };
+
+    const endpoint = typeMap[type.toUpperCase()];
+    if (!endpoint)
+      return { success: false, error: `Unsupported record type: ${type}` };
+
+    if (config.proxyUrl && config.proxyToken) {
+      const url = `${config.proxyUrl}/dns/records/delete`;
+      response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${config.proxyToken}`,
+        },
+        body: JSON.stringify({ domainName, type, host, value }),
+      });
+    } else {
+      if (!config.authUserId || !config.apiKey) {
+        return { success: false, error: "Missing config" };
+      }
+
+      const params = new URLSearchParams({
+        "auth-userid": config.authUserId,
+        "api-key": config.apiKey,
+        "domain-name": domainName,
+        host: host === "@" ? "" : host,
+        value: value,
+      });
+
+      const url = `${BASE_URL}/dns/manage/${endpoint}.json?${params.toString()}`;
+      response = await fetch(url, {
+        method: "POST",
+        headers: COMMON_HEADERS,
+      });
+    }
+
+    const result = await response.json();
+
+    if (response.ok && result.status === "Success") {
+      return { success: true };
+    } else {
+      return {
+        success: false,
+        error: result.message || result.error || "Failed to delete DNS record",
+      };
+    }
+  } catch (error) {
+    console.error("[domains] Delete DNS record error:", error);
+    return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
     };
