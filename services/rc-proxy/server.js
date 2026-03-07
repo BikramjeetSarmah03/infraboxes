@@ -9,7 +9,7 @@ const PROXY_TOKEN = process.env.PROXY_TOKEN;
 // API base URLs (production only)
 // API base URLs
 const IS_TEST = process.env.RESELLERCLUB_IS_TEST === "true";
-const RC_BASE_URL = true
+const RC_BASE_URL = true 
   ? "https://test.httpapi.com/api"
   : "https://httpapi.com/api";
 const RC_DOMAINCHECK_URL = IS_TEST
