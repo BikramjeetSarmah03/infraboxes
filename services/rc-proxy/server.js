@@ -9,7 +9,7 @@ const PROXY_TOKEN = process.env.PROXY_TOKEN;
 // API base URLs (production only)
 // API base URLs
 const IS_TEST = process.env.RESELLERCLUB_IS_TEST === "true";
-const RC_BASE_URL = IS_TEST
+const RC_BASE_URL = true
   ? "https://test.httpapi.com/api"
   : "https://httpapi.com/api";
 const RC_DOMAINCHECK_URL = IS_TEST
@@ -26,6 +26,27 @@ const UPSTREAM_HEADERS = {
   "Cache-Control": "no-cache",
   Pragma: "no-cache",
 };
+
+/**
+ * Log diagnostics for outgoing ResellerClub requests
+ * Redacts sensitive credentials
+ */
+function logOutgoingRequest(url, method) {
+  try {
+    const urlObj = new URL(url);
+    const params = new URLSearchParams(urlObj.search);
+    if (params.has("auth-userid")) params.set("auth-userid", "[REDACTED]");
+    if (params.has("api-key")) params.set("api-key", "[REDACTED]");
+    if (params.has("passwd")) params.set("passwd", "[REDACTED]");
+    if (params.has("password")) params.set("password", "[REDACTED]");
+    const scrubbedUrl = `${urlObj.origin}${urlObj.pathname}?${params.toString()}`;
+    console.log(`[proxy] -> Upstream ${method}: ${scrubbedUrl}`);
+  } catch (_err) {
+    console.log(
+      `[proxy] -> Upstream ${method}: ${url.split("?")[0]} (params could not be parsed)`,
+    );
+  }
+}
 
 /**
  * Log diagnostics for suspicious upstream responses (non-JSON or error status)
@@ -58,6 +79,12 @@ function logUpstreamDiagnostics(path, status, contentType, body) {
 
 app.use(express.json({ limit: "100kb" }));
 
+// Log every incoming request
+app.use((req, res, next) => {
+  console.log(`[proxy] <- Incoming request: ${req.method} ${req.path}`);
+  next();
+});
+
 function requireAuth(req, res, next) {
   const authHeader = req.get("authorization") || "";
   const token = authHeader.startsWith("Bearer ")
@@ -65,6 +92,9 @@ function requireAuth(req, res, next) {
     : "";
 
   if (!PROXY_TOKEN || token !== PROXY_TOKEN) {
+    console.warn(`[proxy] !! Authentication FAILED for ${req.path}. 
+      Expected token: ${PROXY_TOKEN ? "Present" : "MISSING FROM ENV!"}, 
+      Received: ${token ? "Present" : "Empty"}`);
     return res.status(401).json({ error: "Unauthorized" });
   }
 
@@ -112,6 +142,7 @@ app.post("/domains/available", requireAuth, async (req, res) => {
   tlds.forEach((tld) => params.append("tlds", tld.trim()));
 
   const url = `${RC_DOMAINCHECK_URL}?${params.toString()}`;
+  logOutgoingRequest(url, "GET");
 
   try {
     const response = await fetch(url, {
@@ -162,6 +193,7 @@ app.get("/products/customer-price", requireAuth, async (req, res) => {
   }
 
   const url = `${RC_BASE_URL}/products/customer-price.json?${params.toString()}`;
+  logOutgoingRequest(url, "GET");
 
   try {
     const response = await fetch(url, {
@@ -219,6 +251,7 @@ app.get("/domains/suggest", requireAuth, async (req, res) => {
   }
 
   const url = `${RC_BASE_URL}/domains/v5/suggest-names.json?${params.toString()}`;
+  logOutgoingRequest(url, "GET");
 
   try {
     const response = await fetch(url, {
@@ -300,6 +333,7 @@ app.post("/customers/signup", requireAuth, async (req, res) => {
   params.append("lang-pref", langPref || "en");
 
   const url = `${RC_BASE_URL}/customers/v2/signup.json?${params.toString()}`;
+  logOutgoingRequest(url, "POST");
 
   try {
     const response = await fetch(url, {
@@ -352,6 +386,7 @@ app.get("/customers/search", requireAuth, async (req, res) => {
   }
 
   const url = `${RC_BASE_URL}/customers/search.json?${params.toString()}`;
+  logOutgoingRequest(url, "GET");
 
   try {
     const response = await fetch(url, {
@@ -405,6 +440,7 @@ app.get("/customers/details", requireAuth, async (req, res) => {
   params.append("username", username.trim());
 
   const url = `${RC_BASE_URL}/customers/details.json?${params.toString()}`;
+  logOutgoingRequest(url, "GET");
 
   try {
     const response = await fetch(url, {
@@ -496,13 +532,7 @@ app.post("/domains/register", requireAuth, async (req, res) => {
   nameServers.forEach((ns) => params.append("ns", ns.trim()));
 
   const url = `${RC_BASE_URL}/domains/register.json?${params.toString()}`;
-
-  console.log(
-    "[domains/register] Registering domain:",
-    domainName,
-    "for customer:",
-    customerId,
-  );
+  logOutgoingRequest(url, "POST");
 
   try {
     const response = await fetch(url, {
@@ -597,8 +627,7 @@ app.post("/contacts/add", requireAuth, async (req, res) => {
   params.append("type", type || "Contact");
 
   const url = `${RC_BASE_URL}/contacts/add.json?${params.toString()}`;
-
-  console.log("[contacts/add] Creating contact for customer:", customerId);
+  logOutgoingRequest(url, "POST");
 
   try {
     const response = await fetch(url, {
@@ -652,8 +681,7 @@ app.get("/dns/records", requireAuth, async (req, res) => {
   params.append("domain-name", domainName.trim());
 
   const url = `${RC_BASE_URL}/domainforward/dns-records.json?${params.toString()}`;
-
-  console.log("[dns/records] Fetching DNS records for:", domainName);
+  logOutgoingRequest(url, "GET");
 
   try {
     const response = await fetch(url, {
@@ -810,13 +838,7 @@ app.post("/domains/register", requireAuth, async (req, res) => {
   });
 
   const url = `https://httpapi.com/api/domains/register.json?${params.toString()}`;
-
-  console.log(
-    "[domains/register] Registering domain:",
-    domainName,
-    "for customer:",
-    customerId,
-  );
+  logOutgoingRequest(url, "POST");
 
   try {
     const response = await fetch(url, {
@@ -878,13 +900,7 @@ app.post("/googleapps/order", requireAuth, async (req, res) => {
   params.append("invoice-option", "NoInvoice");
 
   const url = `${RC_BASE_URL}/gapps/in/add.json?${params.toString()}`;
-
-  console.log(
-    "[googleapps/order] Ordering for domain:",
-    domainName,
-    "customerId:",
-    customerId,
-  );
+  logOutgoingRequest(url, "POST");
 
   try {
     const response = await fetch(url, {
@@ -940,13 +956,7 @@ app.post("/googleapps/add-user", requireAuth, async (req, res) => {
   params.append("last-name", lastName);
 
   const url = `${RC_BASE_URL}/googleapps/add-user.json?${params.toString()}`;
-
-  console.log(
-    "[googleapps/add-user] Creating user:",
-    username,
-    "@",
-    domainName,
-  );
+  logOutgoingRequest(url, "POST");
 
   try {
     const response = await fetch(url, {
@@ -999,6 +1009,7 @@ app.get("/googleapps/details", requireAuth, async (req, res) => {
   params.append("order-id", String(orderId));
 
   const url = `${RC_BASE_URL}/googleapps/details.json?${params.toString()}`;
+  logOutgoingRequest(url, "GET");
 
   try {
     const response = await fetch(url, {
@@ -1071,13 +1082,7 @@ app.post("/googleapps/admin/add", requireAuth, async (req, res) => {
   params.append("zip", zip || "00000");
 
   const url = `${RC_BASE_URL}/gapps/in/admin/add.json?${params.toString()}`;
-
-  console.log(
-    "[googleapps/admin/add] Setting up admin for order:",
-    orderId,
-    "email:",
-    emailAddress,
-  );
+  logOutgoingRequest(url, "POST");
 
   try {
     const response = await fetch(url, {
@@ -1128,8 +1133,7 @@ app.post("/dns/activate", requireAuth, async (req, res) => {
   params.append("order-id", String(order_id));
 
   const url = `${RC_DNS_URL}/activate.xml?${params.toString()}`;
-
-  console.log("[dns/activate] Activating DNS for order:", order_id);
+  logOutgoingRequest(url, "POST");
 
   try {
     const response = await fetch(url, {
@@ -1191,8 +1195,7 @@ app.post("/dns/manage/add-record", requireAuth, async (req, res) => {
   }
 
   const url = `${RC_DNS_URL}/manage/add-${recordType.toLowerCase()}-record.json?${params.toString()}`;
-
-  console.log("[dns/add-record] Adding", recordType, "record for", domainName);
+  logOutgoingRequest(url, "POST");
 
   try {
     const response = await fetch(url, {
@@ -1250,6 +1253,7 @@ app.get("/dns/manage/search-records", requireAuth, async (req, res) => {
     params.append("type", String(type).toUpperCase());
 
     const url = `${RC_DNS_URL}/manage/search-records.json?${params.toString()}`;
+    logOutgoingRequest(url, "GET");
 
     try {
       const response = await fetch(url, {
@@ -1292,6 +1296,7 @@ app.get("/dns/manage/search-records", requireAuth, async (req, res) => {
       params.append("type", recordType);
 
       const url = `${RC_DNS_URL}/manage/search-records.json?${params.toString()}`;
+      logOutgoingRequest(url, "GET");
 
       const response = await fetch(url, {
         method: "GET",
@@ -1355,6 +1360,7 @@ app.post("/dns/manage/delete-record", requireAuth, async (req, res) => {
   params.append("record-id", String(recordId));
 
   const url = `${RC_DNS_URL}/manage/delete-record.json?${params.toString()}`;
+  logOutgoingRequest(url, "POST");
 
   try {
     const response = await fetch(url, {

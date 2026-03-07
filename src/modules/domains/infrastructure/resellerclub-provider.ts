@@ -203,7 +203,10 @@ async function checkChunk(
 
     if (config.proxyUrl && config.proxyToken) {
       const url = `${config.proxyUrl}/domains/available`;
-      console.log(`[domains] PROXY CHUNK REQUEST (Specialized): ${url}`);
+      const body = { domainNames: slds, tlds };
+      console.log({ body });
+
+      console.log(`[domains] PROXY CHUNK REQUEST: ${url}`);
 
       response = await fetch(url, {
         method: "POST",
@@ -212,7 +215,7 @@ async function checkChunk(
           Accept: "application/json",
           Authorization: `Bearer ${config.proxyToken}`,
         },
-        body: JSON.stringify({ domainNames: slds, tlds }),
+        body: JSON.stringify(body),
         cache: "no-store",
       });
     } else {
@@ -228,6 +231,8 @@ async function checkChunk(
       tlds.forEach((tld) => {
         params.append("tlds", tld);
       });
+
+      console.log({ params: params.toString() });
 
       const url = `${AVAILABILITY_API}?${params.toString()}`;
       console.log(`[domains] DIRECT CHUNK REQUEST: ${url}`);
