@@ -119,7 +119,7 @@ export function DnsRecordDetailsContainer({
       type: "A",
       host: "@",
       value: "",
-      ttl: "3600",
+      ttl: "7200",
       priority: "",
     },
   });

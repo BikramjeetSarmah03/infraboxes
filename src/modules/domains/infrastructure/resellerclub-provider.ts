@@ -724,7 +724,7 @@ export async function addDnsRecord(
   type: string,
   host: string,
   value: string,
-  ttl: number = 3600,
+  ttl: number = 7200,
   priority?: number,
 ): Promise<{ success: boolean; error?: string }> {
   try {

@@ -75,7 +75,7 @@ export async function listDnsRecords(domainId: string) {
           type: String(r.type || ""),
           host: String(r.host || ""),
           value: String(r.value || ""),
-          ttl: Number(r.ttl || 3600),
+          ttl: Number(r.ttl || 7200),
         })),
       };
     }
@@ -95,7 +95,7 @@ export async function addDnsRecord(
   type: string,
   host: string,
   value: string,
-  ttl: number = 3600,
+  ttl: number = 7200,
   priority?: number,
 ) {
   try {

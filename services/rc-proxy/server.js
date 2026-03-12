@@ -1179,7 +1179,7 @@ app.post("/dns/manage/add-record", requireAuth, async (req, res) => {
   params.append("domain-name", actualDomainName);
   params.append("host", host);
   params.append("value", value);
-  params.append("ttl", String(ttl || 3600));
+  params.append("ttl", String(ttl || 7200));
 
   // If order-id is provided, some endpoints might prefer it, but domain-name is usually enough
   if (actualOrderId && !actualDomainName) {
