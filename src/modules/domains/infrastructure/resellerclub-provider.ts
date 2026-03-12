@@ -790,12 +790,22 @@ export async function addDnsRecord(
 
     const result = await response.json();
 
-    if (response.ok && result.status === "Success") {
+    if (response.ok && (result.status === "Success" || result.status === "SUCCESS")) {
       return { success: true };
     } else {
+      // Improve error message extraction
+      const errorMsg = 
+        result.message || 
+        result.error || 
+        result.msg || 
+        (typeof result.status === "string" && result.status !== "Success" ? result.status : null) ||
+        "Failed to add DNS record";
+
+      console.warn("[domains] ResellerClub API error detail:", result);
+      
       return {
         success: false,
-        error: result.message || result.error || "Failed to add DNS record",
+        error: errorMsg,
       };
     }
   } catch (error) {
@@ -871,12 +881,21 @@ export async function deleteDnsRecord(
 
     const result = await response.json();
 
-    if (response.ok && result.status === "Success") {
+    if (response.ok && (result.status === "Success" || result.status === "SUCCESS")) {
       return { success: true };
     } else {
+      const errorMsg = 
+        result.message || 
+        result.error || 
+        result.msg || 
+        (typeof result.status === "string" && result.status !== "Success" ? result.status : null) ||
+        "Failed to delete DNS record";
+
+      console.warn("[domains] ResellerClub API delete error detail:", result);
+
       return {
         success: false,
-        error: result.message || result.error || "Failed to delete DNS record",
+        error: errorMsg,
       };
     }
   } catch (error) {
@@ -949,10 +968,18 @@ export async function activateDns(
     }
 
     const resObj = result as Record<string, unknown>;
-    if (response.ok && resObj.status === "Success") {
+    if (response.ok && (resObj.status === "Success" || resObj.status === "SUCCESS")) {
       return { success: true };
     } else {
-      const errorMsg = resObj.message || resObj.error || "Failed to activate DNS";
+      const errorMsg = 
+        resObj.message || 
+        resObj.error || 
+        resObj.msg || 
+        (typeof resObj.status === "string" && resObj.status !== "Success" ? resObj.status : null) ||
+        "Failed to activate DNS";
+
+      console.warn("[domains] ResellerClub API activate error detail:", result);
+
       return {
         success: false,
         error: typeof errorMsg === "string" ? errorMsg : "Failed to activate DNS",

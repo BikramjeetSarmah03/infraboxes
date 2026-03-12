@@ -1087,7 +1087,7 @@ app.post("/dns/activate", requireAuth, async (req, res) => {
   params.append("api-key", RESELLERCLUB_API_KEY);
   params.append("order-id", String(actualOrderId));
 
-  const url = `${RC_DNS_URL}/activate.json?${params.toString()}`;
+  const url = `${RC_DNS_URL}/manage/activate.json?${params.toString()}`;
   logOutgoingRequest(url, "POST");
 
   try {
@@ -1176,11 +1176,15 @@ app.post("/dns/manage/add-record", requireAuth, async (req, res) => {
   const params = new URLSearchParams();
   params.append("auth-userid", RESELLERCLUB_AUTH_USER_ID);
   params.append("api-key", RESELLERCLUB_API_KEY);
-  params.append("order-id", String(actualOrderId));
   params.append("domain-name", actualDomainName);
   params.append("host", host);
   params.append("value", value);
   params.append("ttl", String(ttl || 3600));
+
+  // If order-id is provided, some endpoints might prefer it, but domain-name is usually enough
+  if (actualOrderId && !actualDomainName) {
+    params.append("order-id", String(actualOrderId));
+  }
 
   if (rawRecordType === "MX" || rawRecordType === "SRV") {
     params.append("priority", String(priority || 10));
@@ -1357,9 +1361,12 @@ app.post("/dns/manage/delete-record", requireAuth, async (req, res) => {
   const params = new URLSearchParams();
   params.append("auth-userid", RESELLERCLUB_AUTH_USER_ID);
   params.append("api-key", RESELLERCLUB_API_KEY);
-  params.append("order-id", String(actualOrderId));
   params.append("domain-name", actualDomainName);
   params.append("record-id", String(actualRecordId));
+
+  if (actualOrderId && !actualDomainName) {
+    params.append("order-id", String(actualOrderId));
+  }
 
   const url = `${RC_DNS_URL}/manage/delete-record.json?${params.toString()}`;
   logOutgoingRequest(url, "POST");
