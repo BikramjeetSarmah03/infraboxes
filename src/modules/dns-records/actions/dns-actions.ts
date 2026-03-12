@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/shared/infrastructure/database/db-client";
-import { domain } from "@/shared/infrastructure/database/schemas";
+import { domain, dnsRecord } from "@/shared/infrastructure/database/schemas";
 import { eq } from "drizzle-orm";
 import {
   listDnsRecords as listRCRecords,
@@ -47,6 +47,32 @@ export async function getDomainInfo(domainId: string) {
 }
 
 /**
+ * Helper: Wait for DNS zone to be ready after activation
+ * DNS zones need a few seconds to propagate after activation
+ */
+async function waitForDnsReady(
+  domainName: string,
+  orderId: string,
+  maxRetries = 3,
+): Promise<{ success: boolean; records?: Record<string, unknown>[]; error?: string }> {
+  for (let i = 0; i < maxRetries; i++) {
+    if (i > 0) {
+      const delay = 2000 * i;
+      console.log(`[dns] Waiting ${delay}ms before retry ${i + 1}/${maxRetries}...`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+
+    const result = await listRCRecords(domainName, orderId);
+
+    if ((result.success && result.records && result.records.length > 0) || i === maxRetries - 1) {
+      return result;
+    }
+  }
+
+  return { success: true, records: [] };
+}
+
+/**
  * List all DNS records for a domain
  */
 export async function listDnsRecords(domainId: string) {
@@ -56,11 +82,43 @@ export async function listDnsRecords(domainId: string) {
       return { success: false, error: domainData.error };
     }
 
+    // Auto-activate DNS if not already activated (matching old route logic)
+    if (!domainData.domain.isDnsActivated) {
+      console.log(`[dns-actions] DNS not activated for ${domainData.domain.name}, activating...`);
+      const activation = await activateRCDns(domainData.domain.orderId);
+
+      if (activation.success) {
+        console.log(`[dns-actions] DNS activated for ${domainData.domain.name}`);
+        await db
+          .update(domain)
+          .set({ isDnsActivated: true, updatedAt: new Date() })
+          .where(eq(domain.id, domainId));
+        
+        // Use wait helper if we just activated
+        const result = await waitForDnsReady(domainData.domain.name, domainData.domain.orderId);
+        return processListingResult(result);
+      } else {
+        console.error(`[dns-actions] DNS activation failed for ${domainData.domain.name}:`, activation.error);
+        // If activation fails, we still try to list, maybe it's already active upstream
+      }
+    }
+
     const result = await listRCRecords(
       domainData.domain.name,
       domainData.domain.orderId,
     );
 
+    return processListingResult(result);
+  } catch (error) {
+    console.error("[dns-actions] listDnsRecords error:", error);
+    return { success: false, error: "Failed to list DNS records" };
+  }
+}
+
+/**
+ * Process listing result with mapping and normalization
+ */
+function processListingResult(result: { success: boolean; records?: Record<string, unknown>[]; error?: string }) {
     if (result.success && result.records) {
       // Map ResellerClub fields to our consistent interface
       // RC returns some fields with different names based on record type
@@ -95,10 +153,6 @@ export async function listDnsRecords(domainId: string) {
     }
 
     return result;
-  } catch (error) {
-    console.error("[dns-actions] listDnsRecords error:", error);
-    return { success: false, error: "Failed to list DNS records" };
-  }
 }
 
 /**
@@ -128,7 +182,21 @@ export async function addDnsRecord(
       priority,
     );
 
-    if (result.success) {
+    if (result.success && result.recordId) {
+      // Sync to local database
+      await db.insert(dnsRecord).values({
+        id: crypto.randomUUID(),
+        domainId,
+        type: type.toUpperCase(),
+        host,
+        value,
+        ttl: ttl.toString(),
+        priority: priority?.toString() || null,
+        providerRecordId: result.recordId.toString(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
       // If this is the first record, we might want to mark DNS as activated in our DB
       if (!domainData.domain.isDnsActivated) {
         await db
@@ -143,6 +211,48 @@ export async function addDnsRecord(
   } catch (error) {
     console.error("[dns-actions] addDnsRecord error:", error);
     return { success: false, error: "Failed to add DNS record" };
+  }
+}
+
+/**
+ * Update a DNS record (Delete then Create)
+ */
+export async function updateDnsRecord(
+  domainId: string,
+  recordId: string,
+  oldData: { type: string; host: string; value: string },
+  newData: { type: string; host: string; value: string; ttl?: number; priority?: number },
+) {
+  try {
+    console.log(`[dns-actions] Updating record ${recordId} (Delete + Recreate)`);
+    
+    // 1. Delete the old record
+    const deleteResult = await deleteDnsRecord(
+      domainId,
+      recordId,
+      oldData.type,
+      oldData.host,
+      oldData.value,
+    );
+
+    if (!deleteResult.success) {
+      return { success: false, error: `Failed to remove old record: ${deleteResult.error}` };
+    }
+
+    // 2. Create the new record
+    const createResult = await addDnsRecord(
+      domainId,
+      newData.type,
+      newData.host,
+      newData.value,
+      newData.ttl,
+      newData.priority,
+    );
+
+    return createResult;
+  } catch (error) {
+    console.error("[dns-actions] updateDnsRecord error:", error);
+    return { success: false, error: "Failed to update DNS record" };
   }
 }
 
@@ -172,6 +282,8 @@ export async function deleteDnsRecord(
     );
 
     if (result.success) {
+      // Remove from local database
+      await db.delete(dnsRecord).where(eq(dnsRecord.providerRecordId, recordId));
       revalidatePath(`/dns-records/${domainId}`);
     }
 

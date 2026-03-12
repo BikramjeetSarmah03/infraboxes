@@ -726,7 +726,7 @@ export async function addDnsRecord(
   value: string,
   ttl: number = 7200,
   priority?: number,
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; recordId?: string; error?: string }> {
   try {
     let response: Response;
 
@@ -791,7 +791,10 @@ export async function addDnsRecord(
     const result = await response.json();
 
     if (response.ok && (result.status === "Success" || result.status === "SUCCESS")) {
-      return { success: true };
+      return { 
+        success: true, 
+        recordId: String(result.recordid || result.id || result.object_id || result.entityid || "") 
+      };
     } else {
       // Improve error message extraction
       const errorMsg = 

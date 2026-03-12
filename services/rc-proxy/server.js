@@ -1341,6 +1341,7 @@ app.get("/dns/manage/search-records", requireAuth, async (req, res) => {
 
         if (impResponse.ok) {
           const impBody = await impResponse.json();
+          console.log(`[proxy] Impressly response for ${order_id}:`, JSON.stringify(impBody).slice(0, 500));
           const items = impBody.records || impBody;
           if (Array.isArray(items)) {
             allRecords.push(...items);
