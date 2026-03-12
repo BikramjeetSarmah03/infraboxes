@@ -1134,11 +1134,38 @@ app.post("/dns/manage/add-record", requireAuth, async (req, res) => {
 
   const actualOrderId = orderIdDash || order_id || orderId;
   const actualDomainName = domainNameDash || domain_name || domainName;
-  const actualRecordType = recordTypeDash || record_type || type;
+  const rawRecordType = (recordTypeDash || record_type || type || "").toUpperCase();
 
-  if (!actualOrderId || !actualDomainName || !actualRecordType || !host || !value) {
+  // Mapping for ResellerClub specific endpoint naming
+  const typeMap = {
+    A: "ipv4",
+    AAAA: "ipv6",
+  };
+  const actualRecordType = typeMap[rawRecordType] || rawRecordType.toLowerCase();
+
+  if (
+    !actualOrderId ||
+    !actualDomainName ||
+    !rawRecordType ||
+    typeof host !== "string" ||
+    !value
+  ) {
+    const missing = [];
+    if (!actualOrderId) missing.push("order-id");
+    if (!actualDomainName) missing.push("domain-name");
+    if (!rawRecordType) missing.push("record-type");
+    if (typeof host !== "string") missing.push("host");
+    if (!value) missing.push("value");
+
     return res.status(400).json({
-      error: "order-id, domain-name, record-type, host, and value are required",
+      error: `Missing required fields: ${missing.join(", ")}`,
+      received: {
+        orderId: actualOrderId,
+        domainName: actualDomainName,
+        recordType: rawRecordType,
+        hostType: typeof host,
+        value: !!value,
+      },
     });
   }
 
@@ -1149,17 +1176,17 @@ app.post("/dns/manage/add-record", requireAuth, async (req, res) => {
   const params = new URLSearchParams();
   params.append("auth-userid", RESELLERCLUB_AUTH_USER_ID);
   params.append("api-key", RESELLERCLUB_API_KEY);
-  params.append("order-id", String(orderId));
-  params.append("domain-name", domainName);
+  params.append("order-id", String(actualOrderId));
+  params.append("domain-name", actualDomainName);
   params.append("host", host);
   params.append("value", value);
   params.append("ttl", String(ttl || 3600));
 
-  if (recordType === "MX" || recordType === "SRV") {
+  if (rawRecordType === "MX" || rawRecordType === "SRV") {
     params.append("priority", String(priority || 10));
   }
 
-  const url = `${RC_DNS_URL}/manage/add-${recordType.toLowerCase()}-record.json?${params.toString()}`;
+  const url = `${RC_DNS_URL}/manage/add-${actualRecordType}-record.json?${params.toString()}`;
   logOutgoingRequest(url, "POST");
 
   try {
@@ -1330,9 +1357,9 @@ app.post("/dns/manage/delete-record", requireAuth, async (req, res) => {
   const params = new URLSearchParams();
   params.append("auth-userid", RESELLERCLUB_AUTH_USER_ID);
   params.append("api-key", RESELLERCLUB_API_KEY);
-  params.append("order-id", String(orderId));
-  params.append("domain-name", domainName);
-  params.append("record-id", String(recordId));
+  params.append("order-id", String(actualOrderId));
+  params.append("domain-name", actualDomainName);
+  params.append("record-id", String(actualRecordId));
 
   const url = `${RC_DNS_URL}/manage/delete-record.json?${params.toString()}`;
   logOutgoingRequest(url, "POST");
