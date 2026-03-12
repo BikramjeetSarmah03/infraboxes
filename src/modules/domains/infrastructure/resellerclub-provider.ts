@@ -788,21 +788,65 @@ export async function addDnsRecord(
       });
     }
 
-    const result = await response.json();
+    const responseText = await response.text();
+    console.log(`[dns-provider] addDnsRecord raw response for ${domainName}:`, responseText);
 
-    if (response.ok && (result.status === "Success" || result.status === "SUCCESS")) {
+    let result: Record<string, unknown>;
+    try {
+      result = JSON.parse(responseText) as Record<string, unknown>;
+    } catch {
+      result = { status: responseText.includes("Success") ? "Success" : "Error", raw: responseText };
+    }
+
+    const isSuccess = response.ok && (
+      responseText.toLowerCase().includes("success") ||
+      result.status === "Success" || 
+      result.status === "SUCCESS" || 
+      result.status === "success"
+    );
+
+    if (isSuccess) {
+      // Be EXTREMELY aggressive in finding any numerical or ID-like field
+      // Some RC endpoints return 'recordid', some 'entityid', some 'entity-id', etc.
+      let rid = 
+        result.recordid || 
+        result.entityid || 
+        result.recid || 
+        result.id || 
+        result.object_id || 
+        result["entity-id"] ||
+        result["record-id"];
+
+      // If still not found, try to find ANY numerical field that isn't 'status'
+      if (!rid) {
+        for (const [key, val] of Object.entries(result)) {
+          if (key.toLowerCase().includes("id") || key.toLowerCase().includes("rec")) {
+            if (val && !Number.isNaN(Number(val))) {
+              rid = val;
+              break;
+            }
+          }
+        }
+      }
+
+      // If still not found and the response is just a number
+      if (!rid && !Number.isNaN(Number(responseText)) && responseText.length > 0) {
+        rid = responseText;
+      }
+      
+      const recordId = rid ? String(rid).trim() : "";
+      console.log(`[dns-provider] Resolved recordId: "${recordId}"`);
+
       return { 
         success: true, 
-        recordId: String(result.recordid || result.id || result.object_id || result.entityid || "") 
+        recordId
       };
     } else {
       // Improve error message extraction
       const errorMsg = 
-        result.message || 
-        result.error || 
-        result.msg || 
-        (typeof result.status === "string" && result.status !== "Success" ? result.status : null) ||
-        "Failed to add DNS record";
+        String(result.message || result.error || result.msg || 
+        (typeof result.status === "string" && result.status.toLowerCase() !== "success" ? result.status : "") ||
+        "Failed to add DNS record");
 
       console.warn("[domains] ResellerClub API error detail:", result);
       

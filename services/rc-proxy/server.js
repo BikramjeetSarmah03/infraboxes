@@ -1182,8 +1182,7 @@ app.post("/dns/manage/add-record", requireAuth, async (req, res) => {
   const finalTtl = Math.max(Number(ttl || 0), 7200);
   params.append("ttl", String(finalTtl));
 
-  // If order-id is provided, some endpoints might prefer it, but domain-name is usually enough
-  if (actualOrderId && !actualDomainName) {
+  if (actualOrderId) {
     params.append("order-id", String(actualOrderId));
   }
 
@@ -1208,6 +1207,7 @@ app.post("/dns/manage/add-record", requireAuth, async (req, res) => {
       contentType,
       body,
     );
+    console.log(`[proxy] ResellerClub add-record response for ${actualDomainName}:`, body);
 
     if (contentType) {
       res.set("content-type", contentType);
