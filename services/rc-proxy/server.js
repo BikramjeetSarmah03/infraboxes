@@ -1179,7 +1179,8 @@ app.post("/dns/manage/add-record", requireAuth, async (req, res) => {
   params.append("domain-name", actualDomainName);
   params.append("host", host);
   params.append("value", value);
-  params.append("ttl", String(ttl || 7200));
+  const finalTtl = Math.max(Number(ttl || 0), 7200);
+  params.append("ttl", String(finalTtl));
 
   // If order-id is provided, some endpoints might prefer it, but domain-name is usually enough
   if (actualOrderId && !actualDomainName) {
@@ -1317,6 +1318,44 @@ app.get("/dns/manage/search-records", requireAuth, async (req, res) => {
             parseError,
           );
         }
+      }
+    }
+
+    // Fallback to Impressly DNS endpoint if no records found
+    // This is often used for domains using "Free DNS" or "Impressly DNS"
+    if (allRecords.length === 0 && order_id) {
+      console.log(`[proxy] No standard records found for ${domain_name}, checking Impressly endpoint...`);
+      const impParams = new URLSearchParams();
+      impParams.append("auth-userid", RESELLERCLUB_AUTH_USER_ID);
+      impParams.append("api-key", RESELLERCLUB_API_KEY);
+      impParams.append("order-id", String(order_id));
+
+      const impUrl = `${RC_BASE_URL}/impressly/dns-record.json?${impParams.toString()}`;
+      logOutgoingRequest(impUrl, "GET");
+
+      try {
+        const impResponse = await fetch(impUrl, {
+          method: "GET",
+          headers: UPSTREAM_HEADERS,
+        });
+
+        if (impResponse.ok) {
+          const impBody = await impResponse.json();
+          const items = impBody.records || impBody;
+          if (Array.isArray(items)) {
+            allRecords.push(...items);
+          } else if (items && typeof items === "object") {
+            Object.values(items).forEach((val) => {
+              if (Array.isArray(val)) {
+                allRecords.push(...val);
+              } else if (val && typeof val === "object") {
+                allRecords.push(val);
+              }
+            });
+          }
+        }
+      } catch (impError) {
+        console.error("[proxy] Impressly DNS search failed:", impError);
       }
     }
 

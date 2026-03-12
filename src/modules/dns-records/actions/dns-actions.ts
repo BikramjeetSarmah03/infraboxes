@@ -71,10 +71,24 @@ export async function listDnsRecords(domainId: string) {
         ...result,
         records: (result.records as Record<string, unknown>[]).map((r) => ({
           ...r,
-          id: String(r.recordid || r.id || r.object_id || ""),
-          type: String(r.type || ""),
-          host: String(r.host || ""),
-          value: String(r.value || ""),
+          id: String(
+            r.recordid ||
+              r.id ||
+              r.object_id ||
+              r["record-id"] ||
+              r.dns_id ||
+              "",
+          ),
+          type: String(r.type || r["record-type"] || r.rectype || ""),
+          host: String(r.host || r.hostname || r["host-name"] || ""),
+          value: String(
+            r.value ||
+              r.val ||
+              r["record-value"] ||
+              r.address ||
+              r.content ||
+              "",
+          ),
           ttl: Number(r.ttl || 7200),
         })),
       };

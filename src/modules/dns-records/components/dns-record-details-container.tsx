@@ -72,7 +72,9 @@ const dnsRecordSchema = z.object({
   type: z.enum(["A", "AAAA", "MX", "CNAME", "TXT", "SRV", "NS"]),
   host: z.string().min(1, "Name is required (use @ for root)"),
   value: z.string().min(1, "Target / Value is required"),
-  ttl: z.string().min(1, "TTL is required"),
+  ttl: z.string().min(1, "TTL is required").refine((val) => Number(val) >= 7200, {
+    message: "TTL must be at least 7200 (2 hours)",
+  }),
   priority: z.string().optional(),
 }).refine((data) => {
   if (data.type === "A") {
@@ -465,9 +467,7 @@ export function DnsRecordDetailsContainer({
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent className="bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
-                              <SelectItem value="600" className="text-[11px] font-medium uppercase tracking-widest">10 Minutes</SelectItem>
-                              <SelectItem value="1800" className="text-[11px] font-medium uppercase tracking-widest">1/2 Hour</SelectItem>
-                              <SelectItem value="3600" className="text-[11px] font-medium uppercase tracking-widest">1 Hour</SelectItem>
+                              <SelectItem value="7200" className="text-[11px] font-medium uppercase tracking-widest">2 Hours</SelectItem>
                               <SelectItem value="14400" className="text-[11px] font-medium uppercase tracking-widest">4 Hours</SelectItem>
                               <SelectItem value="43200" className="text-[11px] font-medium uppercase tracking-widest">12 Hours</SelectItem>
                               <SelectItem value="86400" className="text-[11px] font-medium uppercase tracking-widest">1 Day</SelectItem>

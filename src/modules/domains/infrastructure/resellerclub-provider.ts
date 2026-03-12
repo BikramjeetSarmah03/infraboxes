@@ -774,7 +774,7 @@ export async function addDnsRecord(
         "domain-name": domainName,
         host: host === "@" ? "" : host,
         value: value,
-        ttl: ttl.toString(),
+        ttl: Math.max(Number(ttl || 0), 7200).toString(),
       });
 
       if (priority !== undefined) {
