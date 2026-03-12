@@ -15,13 +15,22 @@ import {
   Lock,
   Search,
   ShoppingCart,
+  Sparkles,
   Trash2,
 } from "lucide-react";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Command,
   CommandEmpty,
@@ -39,18 +48,37 @@ import {
 } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { purchaseDomain } from "../actions/domain-actions";
+import {
+  getUserProfileForBilling,
+  purchaseDomain,
+} from "../actions/domain-actions";
 import type { DomainAvailability } from "../domain-types";
 import { DomainSearchSection } from "./domain-search-section";
 
 type CheckoutStep = "search" | "cart" | "billing";
 
+interface PurchaseResult {
+  success: boolean;
+  orderId?: string;
+  id?: string;
+  error?: string;
+}
+
 export function DomainCheckoutWizard() {
-  const [currentStep, setCurrentStep] = useState<CheckoutStep>("search");
-  const [cart, setCart] = useState<DomainAvailability[]>([]);
+  const [currentStep, setCurrentStep] = useState<CheckoutStep | "success">(
+    "search",
+  );
+  const router = useRouter();
+  const [cart, setCart] = useState<(DomainAvailability & { years: number })[]>(
+    [],
+  );
+  const [purchaseResults, setPurchaseResults] = useState<PurchaseResult[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [couponCode, setCouponCode] = useState("");
+  const [discountAmount, setDiscountAmount] = useState(0);
   const [billingInfo, setBillingInfo] = useState({
     name: "",
+    company: "",
     address: "",
     city: "",
     state: "",
@@ -66,7 +94,8 @@ export function DomainCheckoutWizard() {
 
   const countries = Country.getAllCountries();
   const selectedCountryObj = countries.find(
-    (c) => c.isoCode === billingInfo.countryCode || c.name === billingInfo.country,
+    (c) =>
+      c.isoCode === billingInfo.countryCode || c.name === billingInfo.country,
   );
 
   const states = selectedCountryObj
@@ -95,8 +124,30 @@ export function DomainCheckoutWizard() {
       toast.error(`${domain.domain} is already in your cart`);
       return;
     }
-    setCart([...cart, domain]);
+    setCart([...cart, { ...domain, years: 1 }]);
     toast.success(`${domain.domain} added to cart!`);
+  };
+
+  const updateYears = (domainName: string, years: number) => {
+    setCart(
+      cart.map((item) =>
+        item.domain === domainName ? { ...item, years } : item,
+      ),
+    );
+  };
+
+  const applyCoupon = () => {
+    // Mock coupon logic for now
+    if (couponCode.toUpperCase() === "INFRA10") {
+      setDiscountAmount(10);
+      toast.success("Coupon INFRA10 applied! $10 off.");
+    } else if (couponCode.toUpperCase() === "FREE") {
+      setDiscountAmount(totalPrice);
+      toast.success("Free domain coupon applied!");
+    } else {
+      toast.error("Invalid coupon code");
+      setDiscountAmount(0);
+    }
   };
 
   const removeFromCart = (domainName: string) => {
@@ -104,28 +155,69 @@ export function DomainCheckoutWizard() {
     toast.info("Domain removed from cart");
   };
 
+  // Pricing formula: Register + (Years - 1) * Renew
+  const calculateItemPrice = (item: (typeof cart)[0]) => {
+    const register = parseFloat(item.pricing?.register || "0");
+    const renew = parseFloat(
+      item.pricing?.renew || item.pricing?.register || "0",
+    );
+    return register + (item.years - 1) * renew;
+  };
+
   const totalPrice = cart.reduce((acc, current) => {
-    return acc + parseFloat(current.pricing?.register || "0");
+    return acc + calculateItemPrice(current);
   }, 0);
+
+  const finalTotal = Math.max(0, totalPrice - discountAmount);
+
+  // Prefill effect
+  useEffect(() => {
+    if (currentStep === "billing") {
+      const prefill = async () => {
+        const result = await getUserProfileForBilling();
+        if (result.success && result.profile) {
+          setBillingInfo((prev) => ({
+            ...prev,
+            name: prev.name || result.profile?.name || "",
+            company: prev.company || result.profile?.company || "",
+          }));
+          toast.info("Billing information prefilled from your profile");
+        }
+      };
+      prefill();
+    }
+  }, [currentStep]);
 
   const handleFinalPurchase = async () => {
     setIsProcessing(true);
     try {
       // For now, we simulate purchasing all domains in the cart
-      const purchasePromises = cart.map((item) => purchaseDomain(item.domain, billingInfo));
+      // We divide the total discount equally among all domains for the API call
+      const discountPerDomain = discountAmount / cart.length;
+
+      const purchasePromises = cart.map((item) =>
+        purchaseDomain(item.domain, billingInfo, item.years, discountPerDomain),
+      );
       const results = await Promise.all(purchasePromises);
 
+      setPurchaseResults(results);
       const successful = results.filter((r) => r.success);
+
       if (successful.length === cart.length) {
         toast.success("Successfully registered all domains!");
-        setCart([]);
-        setCurrentStep("search");
-      } else {
+        setCurrentStep("success");
+        setCart([]); // Clear cart after success
+      } else if (successful.length > 0) {
         toast.warning(
           `Registered ${successful.length} of ${cart.length} domains`,
         );
+        setCurrentStep("success");
+        // Keep failed ones in cart? For now clear it as we move to success view
+        setCart([]);
+      } else {
+        toast.error("Registration failed for all domains");
       }
-    } catch (error) {
+    } catch {
       toast.error("Failed to process registration");
     } finally {
       setIsProcessing(false);
@@ -258,6 +350,11 @@ export function DomainCheckoutWizard() {
                         </span>
                         <span className="text-[10px] uppercase tracking-[0.2em] font-black text-zinc-400 mt-1.5">
                           ${totalPrice.toFixed(2)} Total
+                          {discountAmount > 0 && (
+                            <span className="text-emerald-500 ml-2">
+                              (-${discountAmount.toFixed(2)})
+                            </span>
+                          )}
                         </span>
                       </div>
                     </div>
@@ -281,7 +378,7 @@ export function DomainCheckoutWizard() {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="max-w-[1100px] mx-auto container px-4"
+            className="max-w-275 mx-auto container px-4"
           >
             <div className="space-y-10">
               <div className="flex items-center justify-between">
@@ -336,12 +433,50 @@ export function DomainCheckoutWizard() {
                           </div>
                         </div>
                         <div className="flex items-center space-x-10">
-                          <div className="text-right space-y-0.5">
-                            <div className="text-xl font-black text-zinc-900 dark:text-zinc-50 tracking-tight leading-none">
-                              ${item.pricing?.register || "0.00"}
+                          <div className="flex items-center space-x-6">
+                            <div className="space-y-1">
+                              <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">
+                                Registration Term
+                              </p>
+                              <Select
+                                value={item.years.toString()}
+                                onValueChange={(val) =>
+                                  updateYears(item.domain, parseInt(val))
+                                }
+                              >
+                                <SelectTrigger className="h-9 w-24 rounded-lg border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-2 font-bold text-xs ring-0 focus:ring-0">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent className="bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
+                                  {[1, 2, 3, 5, 10].map((y) => (
+                                    <SelectItem
+                                      key={y}
+                                      value={y.toString()}
+                                      className="font-bold text-xs cursor-pointer"
+                                    >
+                                      {y} {y === 1 ? "Year" : "Years"}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
                             </div>
-                            <div className="text-[9px] font-black text-zinc-400 uppercase tracking-widest leading-none">
-                              Renewal: ${item.pricing?.renew}/yr
+                            <div className="text-right space-y-0.5">
+                              <div className="text-xl font-black text-zinc-900 dark:text-zinc-50 tracking-tight leading-none">
+                                ${calculateItemPrice(item).toFixed(2)}
+                              </div>
+                              <div className="text-[9px] font-black text-zinc-400 uppercase tracking-widest leading-none">
+                                {item.years > 1 ? (
+                                  <>
+                                    Avg: $
+                                    {(
+                                      calculateItemPrice(item) / item.years
+                                    ).toFixed(2)}
+                                    /yr
+                                  </>
+                                ) : (
+                                  <>Renewal: ${item.pricing?.renew}/yr</>
+                                )}
+                              </div>
                             </div>
                           </div>
                           <Button
@@ -369,21 +504,53 @@ export function DomainCheckoutWizard() {
                           key={item.domain}
                           className="flex justify-between items-center bg-zinc-800/50 dark:bg-zinc-100/50 p-3 rounded-lg border border-zinc-700/50 dark:border-zinc-200/50"
                         >
-                          <span className="font-bold text-[11px] text-zinc-300 dark:text-zinc-600 truncate max-w-[150px]">
+                          <span className="font-bold text-[11px] text-zinc-300 dark:text-zinc-600 truncate max-w-37.5">
                             {item.domain}
                           </span>
                           <span className="font-black text-xs text-white dark:text-zinc-900">
-                            ${item.pricing?.register || "0.00"}
+                            ${calculateItemPrice(item).toFixed(2)}
                           </span>
                         </div>
                       ))}
+
+                      {/* Coupon Section */}
+                      <div className="pt-8 space-y-4">
+                        <Label className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400 dark:text-zinc-500">
+                          Promo Code
+                        </Label>
+                        <div className="flex gap-2">
+                          <Input
+                            placeholder="Enter Code"
+                            value={couponCode}
+                            onChange={(e) => setCouponCode(e.target.value)}
+                            className="h-11 rounded-lg border-zinc-800 dark:border-zinc-200 bg-zinc-800 dark:bg-white text-white dark:text-zinc-900 font-bold px-4 ring-0 focus:ring-0"
+                          />
+                          <Button
+                            onClick={applyCoupon}
+                            className="h-11 px-6 bg-white dark:bg-zinc-900 text-black dark:text-white font-black uppercase text-[10px] tracking-widest hover:bg-zinc-200 dark:hover:bg-zinc-800"
+                          >
+                            Apply
+                          </Button>
+                        </div>
+                        {discountAmount > 0 && (
+                          <div className="flex justify-between items-center px-4 py-2 bg-emerald-500/10 rounded-lg border border-emerald-500/20">
+                            <span className="text-[10px] font-black uppercase text-emerald-500">
+                              Discount Applied
+                            </span>
+                            <span className="text-xs font-black text-emerald-400">
+                              -${discountAmount.toFixed(2)}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
                       <div className="pt-6 mt-6 border-t border-zinc-800 dark:border-zinc-200 space-y-6">
                         <div className="flex justify-between items-baseline">
                           <span className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">
                             Order Total
                           </span>
                           <div className="text-4xl font-black tracking-tight text-white dark:text-zinc-900 leading-none">
-                            ${totalPrice.toFixed(2)}
+                            ${finalTotal.toFixed(2)}
                           </div>
                         </div>
                         <Button
@@ -435,10 +602,26 @@ export function DomainCheckoutWizard() {
                     </Label>
                     <Input
                       placeholder="John Doe"
-                      className="rounded-lg h-12 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-4 font-bold focus:ring-0 focus:border-zinc-900 dark:focus:border-zinc-100 transition-all"
+                      className="rounded-lg h-12 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-4 font-bold focus:ring-0 focus:border-zinc-900 dark:focus:border-zinc-100 transition-all shadow-none"
                       value={billingInfo.name}
                       onChange={(e) =>
                         setBillingInfo({ ...billingInfo, name: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2.5">
+                    <Label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">
+                      Company / Organization
+                    </Label>
+                    <Input
+                      placeholder="Company Name"
+                      className="rounded-lg h-12 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-4 font-bold focus:ring-0 focus:border-zinc-900 dark:focus:border-zinc-100 transition-all shadow-none"
+                      value={billingInfo.company}
+                      onChange={(e) =>
+                        setBillingInfo({
+                          ...billingInfo,
+                          company: e.target.value,
+                        })
                       }
                     />
                   </div>
@@ -448,7 +631,7 @@ export function DomainCheckoutWizard() {
                     </Label>
                     <Input
                       placeholder="Street Address"
-                      className="rounded-lg h-12 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-4 font-bold focus:ring-0 focus:border-zinc-900 dark:focus:border-zinc-100 transition-all"
+                      className="rounded-lg h-12 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-4 font-bold focus:ring-0 focus:border-zinc-900 dark:focus:border-zinc-100 transition-all shadow-none"
                       value={billingInfo.address}
                       onChange={(e) =>
                         setBillingInfo({
@@ -459,7 +642,9 @@ export function DomainCheckoutWizard() {
                     />
                   </div>
                   <div className="space-y-2.5">
-                    <Label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">Country</Label>
+                    <Label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">
+                      Country
+                    </Label>
                     <Popover open={openCountry} onOpenChange={setOpenCountry}>
                       <PopoverTrigger asChild>
                         <Button
@@ -467,18 +652,26 @@ export function DomainCheckoutWizard() {
                           role="combobox"
                           className={cn(
                             "w-full justify-between rounded-lg h-12 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-4 font-bold text-left shadow-none",
-                            !billingInfo.country && "text-zinc-400"
+                            !billingInfo.country && "text-zinc-400",
                           )}
                         >
                           {billingInfo.country || "Select Country"}
                           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                         </Button>
                       </PopoverTrigger>
-                      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                      <PopoverContent
+                        className="w-[--radix-popover-trigger-width] p-0"
+                        align="start"
+                      >
                         <Command className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800">
-                          <CommandInput placeholder="Search country..." className="h-11 font-bold border-none ring-0 focus:ring-0" />
+                          <CommandInput
+                            placeholder="Search country..."
+                            className="h-11 font-bold border-none ring-0 focus:ring-0"
+                          />
                           <CommandList>
-                            <CommandEmpty className="py-6 text-center text-xs font-bold text-zinc-400">No country found.</CommandEmpty>
+                            <CommandEmpty className="py-6 text-center text-xs font-bold text-zinc-400">
+                              No country found.
+                            </CommandEmpty>
                             <CommandGroup className="px-2">
                               {countries.map((country) => (
                                 <CommandItem
@@ -500,7 +693,9 @@ export function DomainCheckoutWizard() {
                                   <Check
                                     className={cn(
                                       "mr-2 h-4 w-4",
-                                      country.name === billingInfo.country ? "opacity-100" : "opacity-0"
+                                      country.name === billingInfo.country
+                                        ? "opacity-100"
+                                        : "opacity-0",
                                     )}
                                   />
                                   {country.name}
@@ -514,7 +709,9 @@ export function DomainCheckoutWizard() {
                   </div>
 
                   <div className="space-y-2.5">
-                    <Label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">State / Region</Label>
+                    <Label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">
+                      State / Region
+                    </Label>
                     <Popover open={openState} onOpenChange={setOpenState}>
                       <PopoverTrigger asChild>
                         <Button
@@ -524,18 +721,26 @@ export function DomainCheckoutWizard() {
                           className={cn(
                             "w-full justify-between rounded-lg h-12 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-4 font-bold text-left shadow-none",
                             !billingInfo.state && "text-zinc-400",
-                            !selectedCountryObj && "opacity-50"
+                            !selectedCountryObj && "opacity-50",
                           )}
                         >
                           {billingInfo.state || "Select State"}
                           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                         </Button>
                       </PopoverTrigger>
-                      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                      <PopoverContent
+                        className="w-[--radix-popover-trigger-width] p-0"
+                        align="start"
+                      >
                         <Command className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800">
-                          <CommandInput placeholder="Search state..." className="h-11 font-bold border-none ring-0 focus:ring-0" />
+                          <CommandInput
+                            placeholder="Search state..."
+                            className="h-11 font-bold border-none ring-0 focus:ring-0"
+                          />
                           <CommandList>
-                            <CommandEmpty className="py-6 text-center text-xs font-bold text-zinc-400">No state found.</CommandEmpty>
+                            <CommandEmpty className="py-6 text-center text-xs font-bold text-zinc-400">
+                              No state found.
+                            </CommandEmpty>
                             <CommandGroup className="px-2">
                               {states.map((state) => (
                                 <CommandItem
@@ -555,7 +760,9 @@ export function DomainCheckoutWizard() {
                                   <Check
                                     className={cn(
                                       "mr-2 h-4 w-4",
-                                      state.name === billingInfo.state ? "opacity-100" : "opacity-0"
+                                      state.name === billingInfo.state
+                                        ? "opacity-100"
+                                        : "opacity-0",
                                     )}
                                   />
                                   {state.name}
@@ -569,7 +776,9 @@ export function DomainCheckoutWizard() {
                   </div>
 
                   <div className="space-y-2.5">
-                    <Label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">City</Label>
+                    <Label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">
+                      City
+                    </Label>
                     <Popover open={openCity} onOpenChange={setOpenCity}>
                       <PopoverTrigger asChild>
                         <Button
@@ -579,18 +788,26 @@ export function DomainCheckoutWizard() {
                           className={cn(
                             "w-full justify-between rounded-lg h-12 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-4 font-bold text-left shadow-none",
                             !billingInfo.city && "text-zinc-400",
-                            !selectedStateObj && "opacity-50"
+                            !selectedStateObj && "opacity-50",
                           )}
                         >
                           {billingInfo.city || "Select City"}
                           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                         </Button>
                       </PopoverTrigger>
-                      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                      <PopoverContent
+                        className="w-[--radix-popover-trigger-width] p-0"
+                        align="start"
+                      >
                         <Command className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800">
-                          <CommandInput placeholder="Search city..." className="h-11 font-bold border-none ring-0 focus:ring-0" />
+                          <CommandInput
+                            placeholder="Search city..."
+                            className="h-11 font-bold border-none ring-0 focus:ring-0"
+                          />
                           <CommandList>
-                            <CommandEmpty className="py-6 text-center text-xs font-bold text-zinc-400">No city found.</CommandEmpty>
+                            <CommandEmpty className="py-6 text-center text-xs font-bold text-zinc-400">
+                              No city found.
+                            </CommandEmpty>
                             <CommandGroup className="px-2">
                               {cities.map((city) => (
                                 <CommandItem
@@ -608,7 +825,9 @@ export function DomainCheckoutWizard() {
                                   <Check
                                     className={cn(
                                       "mr-2 h-4 w-4",
-                                      city.name === billingInfo.city ? "opacity-100" : "opacity-0"
+                                      city.name === billingInfo.city
+                                        ? "opacity-100"
+                                        : "opacity-0",
                                     )}
                                   />
                                   {city.name}
@@ -622,12 +841,19 @@ export function DomainCheckoutWizard() {
                   </div>
 
                   <div className="space-y-2.5">
-                    <Label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">ZIP / Postcode</Label>
+                    <Label className="text-[10px] uppercase font-black tracking-widest text-zinc-500">
+                      ZIP / Postcode
+                    </Label>
                     <Input
                       placeholder="10001"
                       className="rounded-lg h-12 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-4 font-bold focus:ring-0 focus:border-zinc-900 dark:focus:border-zinc-100 transition-all shadow-none"
                       value={billingInfo.zipcode}
-                      onChange={(e) => setBillingInfo({...billingInfo, zipcode: e.target.value})}
+                      onChange={(e) =>
+                        setBillingInfo({
+                          ...billingInfo,
+                          zipcode: e.target.value,
+                        })
+                      }
                     />
                   </div>
                 </div>
@@ -642,11 +868,32 @@ export function DomainCheckoutWizard() {
                         Order Total
                       </span>
                       <span className="text-3xl font-black text-emerald-500 tracking-tight leading-none">
-                        ${totalPrice.toFixed(2)}
+                        ${finalTotal.toFixed(2)}
                       </span>
                     </div>
 
                     <div className="bg-zinc-50 dark:bg-zinc-900 p-8 rounded-lg border border-zinc-100 dark:border-zinc-800 space-y-8">
+                      {/* Promo Code in Sidebar */}
+                      <div className="space-y-3">
+                        <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
+                          Apply Promo
+                        </Label>
+                        <div className="flex gap-2">
+                          <Input
+                            placeholder="Code"
+                            value={couponCode}
+                            onChange={(e) => setCouponCode(e.target.value)}
+                            className="h-10 text-xs rounded-lg border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 font-bold px-3 ring-0 focus:ring-0 shadow-none"
+                          />
+                          <Button
+                            variant="secondary"
+                            onClick={applyCoupon}
+                            className="h-10 px-4 text-[10px] font-black uppercase tracking-widest"
+                          >
+                            Apply
+                          </Button>
+                        </div>
+                      </div>
                       <div className="flex items-center gap-5">
                         <div className="size-14 rounded-lg bg-zinc-900 dark:bg-zinc-50 flex items-center justify-center border border-zinc-800 dark:border-zinc-200 shadow-sm">
                           <CreditCard className="size-6 text-white dark:text-zinc-900" />
@@ -674,10 +921,10 @@ export function DomainCheckoutWizard() {
                         </div>
                         <div className="flex items-center justify-between">
                           <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">
-                            Processing Fee
+                            Discount
                           </span>
                           <span className="text-sm font-black text-emerald-500">
-                            FREE
+                            -${discountAmount.toFixed(2)}
                           </span>
                         </div>
                       </div>
@@ -718,6 +965,93 @@ export function DomainCheckoutWizard() {
                     </Button>
                   </div>
                 </Card>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {currentStep === "success" && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="max-w-2xl mx-auto pt-12 text-center"
+          >
+            <div className="space-y-12">
+              <div className="space-y-6">
+                <div className="relative inline-flex">
+                  <div className="size-24 rounded-3xl bg-emerald-500 flex items-center justify-center text-white shadow-2xl shadow-emerald-500/20 relative z-10">
+                    <CheckCircle2 className="size-12" />
+                  </div>
+                  <motion.div
+                    animate={{ scale: [1, 1.2, 1], opacity: [0.5, 0.8, 0.5] }}
+                    transition={{ repeat: Infinity, duration: 2 }}
+                    className="absolute -inset-4 bg-emerald-500/10 blur-2xl rounded-full"
+                  />
+                  <Sparkles className="absolute -top-2 -right-2 size-8 text-emerald-500 animate-bounce" />
+                </div>
+                <div className="space-y-4">
+                  <h2 className="text-4xl font-black tracking-tight text-zinc-900 dark:text-zinc-50">
+                    Registration Successful!
+                  </h2>
+                  <p className="text-zinc-500 text-sm font-bold max-w-sm mx-auto leading-relaxed">
+                    Your domains have been secured. We're now configuring the DNS
+                    and setting up the infrastructure for you.
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden p-6">
+                <div className="space-y-4">
+                  {purchaseResults.map((result) => (
+                    <div
+                      key={result.id || result.orderId || Math.random().toString()}
+                      className="flex items-center justify-between p-4 bg-white dark:bg-zinc-950 rounded-xl border border-zinc-100 dark:border-zinc-800"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="size-10 rounded-lg bg-emerald-50 dark:bg-emerald-950 flex items-center justify-center text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900">
+                          <Globe className="size-5" />
+                        </div>
+                        <div className="text-left min-w-0">
+                          <div className="text-sm font-black truncate">
+                            {result.success ? "Registered" : "Failed"}
+                          </div>
+                          <div className="text-[10px] font-bold text-zinc-400 truncate max-w-37.5">
+                            Order ID: {result.orderId || "N/A"}
+                          </div>
+                        </div>
+                      </div>
+                      {result.success && result.id && (
+                        <Button
+                          variant="ghost"
+                          onClick={() => router.push(`/dns-records/${result.id}`)}
+                          className="h-10 px-4 group hover:bg-zinc-100 dark:hover:bg-zinc-800 shrink-0"
+                        >
+                          <span className="text-[10px] font-black uppercase tracking-widest mr-2">
+                            Manage DNS
+                          </span>
+                          <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Button
+                  onClick={() => setCurrentStep("search")}
+                  variant="outline"
+                  className="h-14 px-8 rounded-xl border-zinc-200 dark:border-zinc-800 font-black text-[10px] uppercase tracking-widest hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                >
+                  Buy More Domains
+                </Button>
+                <Button
+                  onClick={() => router.push("/domains")}
+                  className="h-14 px-10 rounded-xl bg-zinc-900 dark:bg-zinc-50 text-white dark:text-zinc-900 font-black text-[10px] uppercase tracking-widest hover:scale-[1.02] shadow-xl shadow-zinc-900/10 dark:shadow-zinc-50/10"
+                >
+                  View My Portfolio
+                </Button>
               </div>
             </div>
           </motion.div>

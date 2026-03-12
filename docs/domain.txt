@@ -1,0 +1,1008 @@
+Description
+Registers a domain name.
+
+Parameters
+
+Name	Data Type	Required / Optional	Description
+auth-userid	Integer	Required	Authentication Parameter
+api-key	String	Required	Authentication Parameter
+domain-name	String	Required	
+Domain name that you need to Register.
+
+For an Internationalized Domain Name, refer to the supported character sets mentioned below:
+
+.ASIA IDN: The character set depends upon the language chosen for the Internationalized Domain Name. You can refer to supported character sets here.
+
+.BIZ IDN: The character set depends upon the language chosen for the Internationalized Domain Name. You can refer to supported character sets below:
+
+Chinese
+
+Danish
+
+Finnish
+
+German
+
+Hungarian
+
+Icelandic
+
+Japanese
+
+Korean
+
+Latvian
+
+Lithuanian
+
+Norwegian
+
+Polish
+
+Portuguese
+
+Spanish
+
+Swedish
+
+.CA IDN: French characters, English alphabets and digits
+
+.CO IDN: The character set depends upon the language chosen for the Internationalized Domain Name. You can refer to supported character sets below:
+
+Chinese
+
+Danish
+
+Finnish
+
+Icelandic
+
+Japanese
+
+Korean
+
+Norwegian
+
+Spanish
+
+Swedish
+
+.COM / .NET IDN: The character set depends upon the language chosen for the Internationalized Domain Name. You can refer to supported character sets here.
+
+Note
+the character ? (codepoint=962) is not supported on our platform.
+
+.DE IDN: Restricted German characters, English alphabets and digits
+
+Note
+the character ß (codepoint=223) is not supported on our platform.
+
+.ES IDN: Restricted Spanish characters, English alphabets and digits
+
+.EU IDN: You can refer to supported character sets here.
+
+.IN.NET IDN: The character set depends upon the language chosen for the Internationalized Domain Name. You can refer to supported character sets here.
+
+.INFO IDN: The character set depends upon the language chosen for the Internationalized Domain Name. You can refer to supported character sets below:
+
+Danish
+
+German
+
+Hungarian
+
+Icelandic
+
+Korean
+
+Latvian
+
+Lithuanian
+
+Polish
+
+Spanish
+
+Swedish
+
+.NAME IDN: The character set depends upon the language chosen for the Internationalized Domain Name. You can refer to supported character sets here.
+
+Note
+the character ? (codepoint=962) is not supported on our platform.
+
+.ORG IDN: The character set depends upon the language chosen for the Internationalized Domain Name. You can refer to supported character sets below:
+
+Chinese (for IDN.org domain name and .?? domain name - the Chinese IDN for .org)
+
+Cyrillic (for .??? domain name - the Russian IDN for .org)
+
+Danish
+
+German
+
+Hindi (for .????? domain name - the Hindi IDN for .org)
+
+Hungarian
+
+Icelandic
+
+Korean
+
+Latvian
+
+Lithuanian
+
+Polish
+
+Spanish
+
+Swedish
+
+.PW IDN: The character set depends upon the language chosen for the Internationalized Domain Name. You can refer to supported character sets here.
+
+.TEL IDN: The character set depends upon the language chosen for the Internationalized Domain Name. You can refer to supported character sets below:
+
+Chinese
+
+Danish
+
+Finnish
+
+French
+
+German
+
+Hungarian
+
+Icelandic
+
+Japanese
+
+Korean
+
+Latvian
+
+Lithuanian
+
+Norwegian
+
+Polish
+
+Portuguese
+
+Russian
+
+Spanish
+
+Swedish
+
+CentralNic IDN: The character set depends upon the language chosen for the Internationalized Domain Name. You can refer to supported character sets below:
+
+.EU.COM:
+
+Arabic
+
+Cyrillic
+
+Greek
+
+Hebrew
+
+Latin
+
+.GB.COM:
+
+Latin
+
+.AE.ORG:
+
+Arabic
+
+.KR.COM:
+
+Korean
+
+.US.COM:
+
+Arabic
+
+Chinese
+
+Cyrillic
+
+Greek
+
+Hebrew
+
+Japanese
+
+Latin
+
+.QC.COM:
+
+Latin
+
+.DE.COM:
+
+Latin
+
+.GB.NET:
+
+Latin
+
+.NO.COM:
+
+Latin
+
+.HU.COM:
+
+Latin
+
+.GR.COM:
+
+Greek
+
+.JPN.COM:
+
+Japanese
+
+.UY.COM:
+
+Latin
+
+.ZA.COM:
+
+Latin
+
+.BR.COM:
+
+Latin
+
+.CN.COM:
+
+Chinese
+
+.SA.COM:
+
+Arabic
+
+.SE.COM:
+
+Latin
+
+.SE.NET:
+
+Latin
+
+.UK.COM:
+
+Latin
+
+.UK.NET:
+
+Latin
+
+.RU.COM:
+
+Cyrillic
+
+.?? (Chinese IDN for .online): You can refer to supported character set here.
+
+.??? (Chinese IDN for .network): You can refer to supported character set here.
+
+Note
+The domain name used in the API call can be in Unicode (the native language) or in Punycode format.
+
+Example: The domain name can be provided as ??111 (Unicode) or xn--111-dkd4l (Punycode).
+
+domain-name=??111
+domain-name=xn--111-dkd4l
+
+years	Integer	Required	
+Number of years for which you wish to Register this domain name.
+
+Note
+.AI Domains can only be registered for 2 years.
+
+ns	Array of Strings	Required	The Name Servers of the domain name.
+customer-id	Integer	Required	The Customer for whom you wish to Register this domain name.
+reg-contact-id	Integer	Required	The Registrant Contact of the domain name.
+admin-contact-id	Integer	Required	
+The Administrative Contact of the domain name.
+
+Note
+Pass -1 for the following TLDs:
+
+.EU
+.RU
+.UK
+tech-contact-id	Integer	Required	
+The Technical Contact of the domain name.
+
+Note
+Pass -1 for the following TLDs:
+
+.EU
+.FR
+.RU
+.UK
+billing-contact-id	Integer	Required	
+The Billing Contact of the domain name.
+
+Note
+Pass -1 for the following TLDs:
+
+.BERLIN
+.CA
+.EU
+.FR
+.NL
+.NZ
+.RU
+.UK
+.LONDON
+invoice-option	String	Required	This will decide how the Customer Invoice will be handled. Set any of below mentioned Invoice Options for your Customer:
+NoInvoice: This will not raise any Invoice. The Order will be executed.
+
+PayInvoice: This will raise an Invoice and:
+
+if there are sufficient funds in the Customer's Debit Account, then the Invoice will be paid and the Order will be executed.
+
+if there are insufficient funds in the Customer's Debit Account, then the Order will remain pending in the system.
+
+KeepInvoice: This will raise an Invoice for the Customer to pay later. The Order will be executed.
+
+OnlyAdd: This will raise an Invoice for the Customer to pay later. The registration action request will remain pending.
+
+purchase-privacy	Boolean	optional	
+Adds the Privacy Protection service for the domain name.
+
+Privacy Protection is not supported for the following TLDs (extensions):
+
+.ASIA
+
+.AU
+
+.CA
+
+.CL
+
+.CN
+
+.ORG.CO, .MIL.CO, .GOV.CO, .EDU.CO
+
+.DE
+
+.ES
+
+.EU
+
+.FR
+
+.IN
+
+.NL
+
+.NZ
+
+.PRO
+
+.RU
+
+.SX
+
+.TEL
+
+.UK
+
+.US
+
+protect-privacy	Boolean	Optional	
+Enables / Disables the Privacy Protection setting for the domain name.
+
+auto-renew	Boolean	Required	
+Enables / Disables the Auto Renewal setting for the domain name.
+
+Note
+Auto-Renewal
+
+attr-name	Map[name]	Optional	Mapping key of the extra details needed to register a domain name. Refer the description of attr-value.
+attr-value	Map[value]	Optional	
+Mapping value of the extra details required to register a domain name. This together with attr-name shall contain the extra details.
+
+To register an Internationalized Domain Name:
+
+idnLanguageCode: While registering an IDN, you need to provide the corresponding language code:
+
+.BHARAT: The language code needs to be mentioned as hin-deva.
+
+attr-name1=idnLanguageCode&attr-value1=hin-deva
+
+.BIZ IDN: The language code depends upon the language whose characters are used in the domain name. Supported languages and the corresponding language codes are:
+
+Chinese - zh
+
+Danish - da
+
+Finnish - fi
+
+German - de
+
+Hungarian - hu
+
+Icelandic - is
+
+Japanese - jp
+
+Korean - ko
+
+Lithuanian - lt
+
+Latvian - lv
+
+Norwegian - no
+
+Polish - pl
+
+Portuguese - pt
+
+Spanish - es
+
+Swedish - sv
+
+attr-name1=idnLanguageCode&attr-value1=ko
+
+.CA IDN: The language code needs to be mentioned as fr.
+
+attr-name1=idnLanguageCode&attr-value1=fr
+
+.CO IDN: The language code depends upon the language whose characters are used in the domain name. Supported languages and the corresponding language codes are:
+
+Chinese - zh
+
+Danish - da
+
+Finnish - fi
+
+Icelandic - is
+
+Japanese - jp
+
+Korean - ko
+
+Norwegian - no
+
+Spanish - es
+
+Swedish - sv
+
+attr-name1=idnLanguageCode&attr-value1=da
+
+.COM / .NET IDN: The language code depends upon the language whose characters are used in the domain name. You can refer to the list of languages supported and the corresponding language code.
+
+attr-name1=idnLanguageCode&attr-value1=aze
+
+.DE IDN: The language code needs to be mentioned as de.
+
+attr-name1=idnLanguageCode&attr-value1=de
+
+.ES IDN: The language code needs to be mentioned as es.
+
+attr-name1=idnLanguageCode&attr-value1=es
+
+.EU IDN: The language code needs to be mentioned as latin.
+
+attr-name1=idnLanguageCode&attr-value1=latin
+
+.IN.NET IDN: The language code depends upon the language whose characters are used in the domain name. Supported languages and the corresponding language codes are:
+
+Arabic - ara
+
+Chinese - chi
+
+Cyrillic - cyr
+
+Greek - gre
+
+Hebrew - heb
+
+Japanese - jpn
+
+Korean - kor
+
+Lao - lao
+
+Latin - lat
+
+Thai - tha
+
+attr-name1=idnLanguageCode&attr-value1=jpn
+
+.INFO IDN: The language code depends upon the language whose characters are used in the domain name. Supported languages and the corresponding language codes are:
+
+Danish - da
+
+German - de
+
+Hungarian - hu
+
+Icelandic - is
+
+Korean - ko
+
+Latvian - lv
+
+Lithuanian - lt
+
+Polish - pl
+
+Spanish - es
+
+Swedish - sv
+
+attr-name1=idnLanguageCode&attr-value1=ko
+
+.NAME IDN: The language code depends upon the language whose characters are used in the domain name. You can refer to the list of languages supported and the corresponding language code.
+
+attr-name1=idnLanguageCode&attr-value1=aze
+
+.ORG IDN: The language code depends upon the language whose characters are used in the domain name. Supported languages and the corresponding language codes are:
+
+Chinese - zh-cn (for IDN.org domain name and .?? domain name - the Chinese IDN for .org)
+
+Cyrillic - ru (for .??? domain name - the Russian IDN for .org)
+
+Danish - da
+
+German - de
+
+Hindi - hin-deva (for .????? domain name - the Hindi IDN for .org)
+
+Hungarian - hu
+
+Icelandic - is
+
+Korean - ko
+
+Latvian - lv
+
+Lithuanian - lt
+
+Polish - pl
+
+Spanish - es
+
+Swedish - sv
+
+attr-name1=idnLanguageCode&attr-value1=ko
+
+.PW IDN: The language code depends upon the language whose characters are used in the domain name. Supported languages and the corresponding language codes are:
+
+Arabic - ara
+
+Chinese - chi
+
+Cyrillic - cyr
+
+Greek - gre
+
+Hebrew - heb
+
+Japanese - jpn
+
+Korean - kor
+
+Lao - lao
+
+Latin - lat
+
+Thai - tha
+
+attr-name1=idnLanguageCode&attr-value1=tha
+
+.TEL IDN: The language code depends upon the language whose characters are used in the domain name. Supported languages and the corresponding language codes are:
+
+Chinese - zh
+
+Danish - da
+
+French - fr
+
+Finnish - fi
+
+German - de
+
+Hungarian - hu
+
+Icelandic - is
+
+Japanese - jp
+
+Korean - ko
+
+Latvian - lv
+
+Lithuanian - lt
+
+Norwegian - no
+
+Polish - pl
+
+Portuguese - pt
+
+Russian - ru
+
+Spanish - es
+
+Swedish - sv
+
+attr-name1=idnLanguageCode&attr-value1=ko
+
+CentralNic IDN: The language code depends upon the language whose characters are used in the domain name. Supported languages and the corresponding language codes are:
+
+.EU.COM:
+
+Arabic - ara
+
+Cyrillic - cyr
+
+Greek - gre
+
+Hebrew - heb
+
+Latin - lat
+
+.GB.COM, .QC.COM, .DE.COM, .GB.NET, .NO.COM, .HU.COM, .UY.COM, .ZA.COM, .BR.COM, .SE.COM, .SE.NET, .UK.COM and .UK.NET:
+
+Latin - lat
+
+.AE.ORG and .SA.COM:
+
+Arabic - ara
+
+.KR.COM:
+
+Korean - kor
+
+.US.COM:
+
+Arabic - ara
+
+Chinese - chi
+
+Cyrillic - cyr
+
+Greek - gre
+
+Hebrew - heb
+
+Japanese - jpn
+
+Latin - lat
+
+.GR.COM:
+
+Greek - gre
+
+.JPN.COM:
+
+Japanese - jpn
+
+.CN.COM:
+
+Chinese - chi
+
+.RU.COM:
+
+Cyrillic - cyr
+
+attr-name1=idnLanguageCode&attr-value1=lat
+
+.?? (Chinese IDN for .online): The language code needs to be mentioned as zh.
+
+attr-name1=idnLanguageCode&attr-value1=zh
+
+.??? (Chinese IDN for .network): The language code needs to be mentioned as zh.
+
+attr-name1=idnLanguageCode&attr-value1=zh
+
+To register a Domain Name in the Sunrise Phase:
+
+phase: Mention the phase as sunrise.
+
+attr-name1=phase&attr-value1=sunrise
+
+smd: Pass the content of the smd file as the value for this attr-name.
+
+attr-name2=smd&attr-value2=<smd_file_content>
+
+To register a Domain Name in the Pre-Registration Phase:
+
+phase: Mention the phase as
+
+prega for regular pre-registration
+
+attr-name1=phase&attr-value1=prega
+
+landrush for priority pre-registration
+
+attr-name1=phase&attr-value1=landrush
+
+To register a domain name that has a Trademark Claim:
+
+tm-claim: Mention the value for this additional parameter as accepted.
+
+attr-name1=tm-claim&attr-value1=accepted
+
+To register a .ASIA domain name:
+
+cedcontactid: While registering a .ASIA domain name, 'Charter Eligibility Declaration Contact ID' is mandatory. This parameter represents the CED Contact ID. You may select any one of the Admin, Technical, Billing or Registrant Contacts as a value for this parameter.
+
+attr-name1=cedcontactid&attr-value1=0
+
+To register a .AU domain name:
+
+id-type: Mention the appropriate EligibilityID Type as the value for this attr-name. This is mandatory. 1
+
+Send either of the following as the attr-value:
+
+ACN: This is the Registrant's Australian Company Number.
+
+ABN: This is the Registrant's Australian Business Number.
+
+VIC BN: This is the Registrant's Victoria Business Number.
+
+NSW BN: This is the Registrant's New South Wales Business Number.
+
+SA BN: This is the Registrant's South Australia Business Number.
+
+NT BN: This is the Registrant's Northern Territory Business Number.
+
+WA BN: This is the Registrant's Western Australia Business Number.
+
+TAS BN: This is the Registrant's Tasmania Business Number.
+
+ACT BN: This is the Registrant's Australian Capital Territory Business Number.
+
+QLD BN: This is the Registrant's Queensland Business Number.
+
+TM: This is the Registrant's Trademark number.
+
+ARBN: This is the Registrant's Registrant's Australian Registered Body Number (ARBN).
+
+Other
+
+attr-name1=id-type&attr-value1=ACN
+
+id: Mention the appropriate ID as the value for this attr-name, depending upon the EligibilityID Type selected. This is mandatory. This may be either a number or string. 2
+
+attr-name2=id&attr-value2=079 009 340
+
+policyReason: Mention the appropriate Eligibility Reason as the value for this attr-name. This is mandatory. 3
+
+attr-name3=policyReason&attr-value3=1
+
+Note
+Mention the attr-value3 as 1 to indicate Domain Name is an Exact Match OR Abbreviation OR Acronym of your Entity or Trading Name. and send 2 to indicate Close and substantial connection between the domain name and the operations of your Entity.
+
+isAUWarranty: You need to display and accept a warranty from the Registrant. When sending this attribute, it's value needs to be true. 4
+
+attr-name4=isAUWarranty&attr-value4=true
+
+eligibilityType: This is mandatory for only the id-type values Trademark and Other. Mention the appropriate value as below.
+
+id-type	eligibilityType
+Trademark	Trademark Owner
+or
+Pending TM Owner
+Other	Other
+attr-name5=eligibilityType&attr-value5=Trademark
+
+eligibilityName: This is mandatory for only the id-type value Trademark. Mention the appropriate Eligibility Name (company name) as the value for this attr-name. 5
+
+attr-name6=eligibilityName&attr-value6=.AU DOMAIN ADMINISTRATION LIMITED
+
+registrantName: This is mandatory for only the id-type values VIC BN, NSW BN, SA BN, NT BN, WA BN, TAS BN, ACT BN, QLD BN, Trademark and Other. Mention the appropriate Registrant Name as the value for this attr-name. This value needs to be the proprietor's name and the proprietor should be an individual. 6
+
+attr-name7=registrantName&attr-value7=RICHARD MARK
+
+To register a .BR (third level) domain name:
+
+organisationId: Only Brazilian nationals or organizations can register .BR domains. Hence, a tax ID (CPF in case of an individual contact) or an organisation ID (CNPJ in case of a company contact) of the person/organisation needs to be supplied. The tax/organization ID must either not be currently registered in our database or it should be a transferred authority to the registrar through the .BR registry web interface.
+
+In addition, depending on the contact, you will need to specify the “type” as BrOrgContact (for the Registrant contact) or BrContact (for the Admin/Technical/Billing contact).
+
+A BrgOrgContact will need the following additional attributes:
+
+attr-name1=organisationId&attr-value1=123456
+
+To register a .CN domain name:
+
+If the Registrant plans on hosting the domain name in China, he/she needs to ensure that he/she has a valid MIIT ICP Number and include the below parameters:
+
+cnhosting: This parameter indicates that the domain name will be hosted in China. The value needs to be passed as true.
+
+attr-name1=cnhosting&attr-value1=true
+
+cnhostingclause: Through this parameter, the Registrant agrees to the terms and conditions for hosting the domain name in China. The value needs to be passed as yes.
+
+attr-name2=cnhostingclause&attr-value2=yes
+
+To register a .FR domain name:
+
+If the Registrant or Admin contact being associated with a .FR domain name belongs to one of the European nations and the contact is of type Organization, a message on the following lines will need to be displayed to the user: "Important information regarding your contact data. We are contractually obligated to share your personal information with the registry for this TLD. This means that your personal information will be transferred to the registry and may be published in the public WHOIS. For details on why we share your personal information, please review our Privacy Policy and the Domain Registration Agreement." This will be validated using a tnc parameter in the API call.
+
+attr-name1=tnc&attr-value1=Y
+
+To register a .QUEBEC domain name:
+
+intended-use: This parameter indicates the intended use of the .QUEBEC domain name. For example, commercial use, statistic website, cultural, etc.
+
+attr-name1=intended-use&attr-value1=commercial use
+
+To register a .SCOT domain name:
+
+intended-use: This parameter indicates the intended use of the .SCOT domain name. For example, commercial use, statistic website, cultural, blog etc.
+
+attr-name1=intended-use&attr-value1=commercial use
+
+If the Registrant contact being associated with a domain name belongs to one of the European nations, a message on the following lines will need to be displayed to the user:
+"Important information regarding your contact data. We are contractually obligated to share your personal information with the registry for this TLD. This means that your personal information will be transferred to the registry and may be published in the public WHOIS.
+
+For details on why we share your personal information, please review our Privacy Policy and the Domain Registration Agreement."  This will be validated using a tnc parameter in the API call.
+attr-name2=tnc&attr-value2=Y
+
+To register a .TEL domain name:
+
+whois-type: This parameter indicates whether the Registrant is an Individual or an Oragnization. The value needs to be passed as either Natural (for Individual) or Legal (for Oragnization).
+
+attr-name1=whois-type&attr-value1=Legal
+
+publish: This parameter indicates whether the Contact Details associated with a .TEL domain name need to be published or excluded from the publicly available Whois database. The value needs to be passed as either Y or N.
+
+This parameter is required if whois-type parameter is Natural, otherwise is it Optional.
+
+attr-name2=publish&attr-value2=Y
+
+Note
+You may exclude the whois-type parameter itself from the API call, since it is optional. In that case,:
+
+whois-type will be automatically set to Legal, AND
+you need not pass the publish parameter.
+To register a 2nd Level .UK domain name with a non UK Registrant Contact, specify an additional Service Contact: 7:
+
+service-contact: Mention the Contact ID of the Service Contact.
+
+attr-name1=service-contact&attr-value1=0
+
+To register a .LAWYER, .ATTORNEY, .LTDA, .SRL domain name:
+
+REGULATORY BODY: The Regulatory Body information is collected during the registration process. This information is only required if the registrant is offering professional services related to the TLD
+
+attr-name1=regulatorybody&attr-value1=<regulatory-body-here>
+
+To register a .AIRFORCE, .ARMY, .APP, .DEGREE, .DEV, .ENGINEER, .GIVES, .LAW, .MARKET, .MORTGAGE, .NAVY, .PAGE, .REHAB, .SOFTWARE, .VET, .VOTE, .VOTO domain name:
+
+TNC: stands for Terms and Conditions
+
+Any other value for attr-value1 except y or Y will result in an error "Please accept the Terms & Conditions".
+
+attr-name1=tnc&attr-value1=y
+
+To register a .DENTIST domain name:
+
+TNC: stands for Terms and Conditions
+
+Any other value for attr-value1 except y or Y will result in an error "Please accept the Terms & Conditions".
+
+REGULATORY BODY: The Regulatory Body information is collected during the registration process. This information is only required if the registrant is offering professional services related to the TLD
+
+attr-name1=tnc&attr-value1=y&attr-name2=regulatorybody&attr-value2=<regulatory-body>
+
+To register a domain with Registrant Organization Consent value
+
+registrant-org-consent: If the domain being registered is a gTLD and contains a registrant organization value then we need to pass this attribute value to send the registrant organization consent 
+
+attr-name1=registrant-org-consent&attr-value1=<true/false>
+
+discount-amount	Float	Optional	Discount amount for the order value.
+purchase-premium-dns	Boolean	Optional	Purchase Premium DNS service. 
+HTTP Method
+POST
+
+Example Test URL Request
+https://test.httpapi.com/api/domains/register.xml?auth-userid=0&api-key=key&domain-name=domain.com&years=1&ns=ns1.domain.com&ns=ns2.domain.com&customer-id=0&reg-contact-id=0&admin-contact-id=0&tech-contact-id=0&billing-contact-id=0&invoice-option=KeepInvoice&discount-amount=0.0 
+
+Example Test URL Request for Registering a Domain Name with Privacy Protection
+https://test.httpapi.com/api/domains/register.xml?auth-userid=0&api-key=key&domain-name=domain.com&years=1&ns=ns1.domain.com&ns=ns2.domain.com&customer-id=0&reg-contact-id=0&admin-contact-id=0&tech-contact-id=0&billing-contact-id=0&invoice-option=KeepInvoice&purchase-privacy=true&discount-amount=0.0 
+
+Example Test URL Request for Registering a Domain Name in the Sunrise Phase
+https://test.httpapi.com/api/domains/register.xml?auth-userid=0&api-key=key&domain-name=domains1.bike&years=1&ns=ns1.domain.com&ns=ns2.domain.com&customerid=0&reg-contact-id=0&admin-contact-id=0&tech-contact-id=0&billing-contact-id=0&invoice-option=KeepInvoice&discount-amount=0.0&attr-name1=phase&attr-value1=sunrise&attr-name2=smd&attr-value2=<smd_file_content> 
+
+Example Test URL Request for Registering a .AU Domain Name
+https://test.httpapi.com/api/domains/register.xml?auth-userid=0&api-key=key&domain-name=domain.net.au&years=2&ns=ns1.domain.com&ns=ns2.domain.com&customer-id=0&reg-contact-id=0&admin-contact-id=0&tech-contact-id=0&billing-contact-id=0&invoice-option=KeepInvoice&discount-amount=0.0&attr-name1=id-type&attr-value1=ACN&attr-name2=id&attr-value2=079 009 340&attr-name3=policyReason&attr-value3=1&attr-name4=isAUWarranty&attr-value4=true 
+
+Example Test URL Request for Registering a .CN Domain Name
+https://test.httpapi.com/api/domains/register.xml?auth-userid=0&api-key=key&domain-name=domain.cn&years=1&ns=ns1.domain.com&ns=ns2.domain.com&customer-id=0&reg-contact-id=0&admin-contact-id=0&tech-contact-id=0&billing-contact-id=0&invoice-option=KeepInvoice&discount-amount=0.0&attr-name1=cnhosting&attr-value1=true&attr-name2=cnhostingclause&attr-value2=yes 
+
+Example Test URL Request for Registering a .COM IDN
+https://test.httpapi.com/api/domains/register.xml?auth-userid=0&api-key=key&domain-name=??112.com&years=1&ns=ns1.domain.com&ns=ns2.domain.com&customer-id=0&reg-contact-id=0&admin-contact-id=0&tech-contact-id=0&billing-contact-id=0&invoice-option=KeepInvoice&discount-amount=0.0&attr-name1=idnLanguageCode&attr-value1=aze 
+
+Example Test URL Request for Registering a .TEL Domain Name
+https://test.httpapi.com/api/domains/register.xml?auth-userid=0&api-key=key&domain-name=domain.tel&years=1&ns=ns1.domain.com&ns=ns2.domain.com&customer-id=0&reg-contact-id=0&admin-contact-id=0&tech-contact-id=0&billing-contact-id=0&invoice-option=KeepInvoice&discount-amount=0.0&attr-name1=whois-type&attr-value1=Natural&attr-name2=publish&attr-value2=N 
+
+Example Test URL Request for Registry Premium domain registration
+https://test.httpapi.com/api/domains/register.xml?auth-userid=0&api-key=key&domain-name=domain.com&years=1&ns=ns1.domain.com&ns=ns2.domain.com&customer-id=0&reg-contact-id=0&admin-contact-id=0&tech-contact-id=0&billing-contact-id=0&invoice-option=KeepInvoice&discount-amount=0.0&attr-name1=premium&attr-value1=true 
+
+Example Test URL Request for domain registration in EAP
+https://test.httpapi.com/api/domains/register.xml?auth-userid=0&api-key=key&domain-name=domain.com&years=1&ns=ns1.domain.com&ns=ns2.domain.com&customer-id=0&reg-contact-id=0&admin-contact-id=0&tech-contact-id=0&billing-contact-id=0&invoice-option=KeepInvoice&discount-amount=0.0&attr-name1=eap&attr-value1=true 
+
+Example Test URL Request for Registry Premium domain registration in EAP
+https://test.httpapi.com/api/domains/register.xml?auth-userid=0&api-key=key&domain-name=domain.com&years=1&ns=ns1.domain.com&ns=ns2.domain.com&customer-id=0&reg-contact-id=0&admin-contact-id=0&tech-contact-id=0&billing-contact-id=0&invoice-option=KeepInvoice&discount-amount=0.0&attr-name1=premium&attr-value1=true&attr-name2=eap&attr-value2=true 
+
+Example Test URL Request for Registering a .LAT Domain Name
+https://test.httpapi.com/api/domains/register.xml?auth-userid=0&api-key=key&domain-name=domain.com&years=1&ns=ns1.domain.com&ns=ns2.domain.com&customer-id=0&reg-contact-id=0&admin-contact-id=0&tech-contact-id=0&billing-contact-id=0&invoice-option=KeepInvoice&discount-amount=0.0 
+
+Note
+For a .lat domain name it is recommended, that you create a contact with the contact type as MXContact. Click here for more information on creating a contact.
+
+Response
+Returns a hash map containing the below details:
+
+Domain Name (description)
+
+Order ID of the Domain Registration Order (entityid)
+
+Action Type (actiontype)
+
+Description of the Domain Registration Action (actiontypedesc)
+
+Action ID of the Domain Registration Action (eaqid)
+
+Domain Registration Action Status (actionstatus)
+
+Description of the Domain Registration Action Status (actionstatusdesc)
+
+Invoice ID of the Domain Registration Invoice (invoiceid)
+
+Selling Currency of the Reseller (sellingcurrencysymbol)
+
+Transaction Amount in the Selling Currency (sellingamount)
+
+Unutilized Transaction Amount in the Selling Currency (unutilisedsellingamount)
+
+Customer ID associated with the Domain Registration Order (customerid)
+
+
+Discount Amount (discount-amount)
+
+Privacy Protection Details (privacydetails)
+
+Domain Name (description)
+
+Order ID of the Domain Registration Order (entityid)
+
+Action Type (actiontype)
+
+Description of the Privacy Protection Purchase Action (actiontypedesc)
+
+Action ID of the Privacy Protection Purchase Action (eaqid)
+
+Privacy Protection Purchase Action Status (actionstatus)
+
+Description of the Privacy Protection Purchase Action Status (actionstatusdesc)
+
+Invoice ID of the Privacy Protection Purchase Invoice (invoiceid)
+
+Selling Currency of the Reseller (sellingcurrencysymbol)
+
+Transaction Amount in the Selling Currency (sellingamount)
+
+Unutilized Transaction Amount in the Selling Currency (unutilisedsellingamount)
+
+Customer ID associated with the Domain Registration Order (customerid)
+
+Note
+invoiceid, sellingcurrencysymbol, sellingamount, unutilisedsellingamount and customerid will not be returned if invoice-option is set to NoInvoice.
+Details under privacydetails will be returned only if purchase-privacy is set to true in the Domain Registration API call
+In case of any errors, a status key with value as ERROR alongwith an error message will be returned.

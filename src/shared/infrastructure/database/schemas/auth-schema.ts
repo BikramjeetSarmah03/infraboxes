@@ -18,6 +18,10 @@ export const user = pgTable("user", {
   scheduledForDeletion: boolean("scheduledForDeletion").default(false),
   deletionScheduledAt: timestamp("deletionScheduledAt"),
   resellerclubCustomerId: text("resellerclubCustomerId"),
+  role: text("role"),
+  banned: boolean("banned"),
+  banReason: text("banReason"),
+  banExpires: timestamp("banExpires"),
   createdAt: timestamp("createdAt").notNull(),
   updatedAt: timestamp("updatedAt").notNull(),
 });

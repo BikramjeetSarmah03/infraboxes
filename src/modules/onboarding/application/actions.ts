@@ -53,15 +53,23 @@ export async function submitOnboarding(data: {
       phoneNumber = phoneFull.slice(phoneFull.length - 10);
     }
 
+    // Sanitize zip code: remove spaces and trim
+    const cleanZip = data.zip.replace(/\s/g, "").trim();
+
+    // ResellerClub specific state logic:
+    // For US, CA, and AU, it requires the state code. For others, it usually takes the full name.
+    const countriesRequiringStateCode = ["US", "CA", "AU"];
+    const rcState = countriesRequiringStateCode.includes(data.countryCode) ? data.stateCode : data.state;
+
     const rcResult = await createResellerClubCustomer({
       username: session.user.email,
       name: data.name || session.user.name || "Customer",
       company: data.companyName,
       addressLine1: data.address,
       city: data.city,
-      state: data.state, // RC signup often accepts full state name
+      state: rcState,
       country: data.countryCode, // RC requires 2-char country code
-      zipcode: data.zip,
+      zipcode: cleanZip,
       phoneCountryCode: phoneCC,
       phone: phoneNumber,
     });
@@ -69,9 +77,7 @@ export async function submitOnboarding(data: {
     if (rcResult.success) {
       resellerclubCustomerId = rcResult.customerId;
     } else {
-      console.error("[onboarding] RC Client Creation Failed:", rcResult.error);
-      // We might want to throw or just log. User says: "create a reseller hub customer account so that we can get price etc"
-      // So we should probably try our best.
+      console.error("[onboarding] RC Client Creation Failed. Country:", data.countryCode, "Zip:", cleanZip, "Error:", rcResult.error);
     }
   }
 

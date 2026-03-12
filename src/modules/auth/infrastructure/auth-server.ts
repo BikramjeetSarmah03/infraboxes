@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { phoneNumber } from "better-auth/plugins/phone-number";
+import { admin } from "better-auth/plugins/admin";
 import { db } from "@/shared/infrastructure/database/db-client";
 import * as schema from "@/shared/infrastructure/database/schemas";
 
@@ -14,7 +15,7 @@ export const auth = betterAuth({
       verification: schema.verification,
     },
   }),
-  plugins: [phoneNumber()],
+  plugins: [phoneNumber(), admin()],
   emailAndPassword: {
     enabled: true,
   },

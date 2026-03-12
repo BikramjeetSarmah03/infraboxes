@@ -43,3 +43,34 @@ export interface ResellerClubCustomerData {
   phone: string;
   langPref?: string;
 }
+export interface BillingData {
+  name: string;
+  company?: string;
+  address: string;
+  city: string;
+  state: string;
+  stateCode?: string;
+  zipcode: string;
+  country: string;
+  countryCode: string;
+}
+
+export interface RCPricingResponse {
+  [productKey: string]: {
+    adddomain?: {
+      [years: string]: string;
+    };
+    renewdomain?: {
+      [years: string]: string;
+    };
+  };
+}
+
+export interface DNSRecord {
+  id: string;
+  type: string;
+  host: string;
+  value: string;
+  ttl: number;
+  priority?: number;
+}

@@ -1,6 +1,6 @@
 "use server";
 
-import type { DomainAvailability } from "../domain-types";
+import type { BillingData } from "../domain-types";
 import {
   checkDomainAvailability,
   getDomainSuggestions,
@@ -8,6 +8,7 @@ import {
   createResellerClubContact,
   registerDomain,
 } from "../infrastructure/resellerclub-provider";
+import { revalidatePath } from "next/cache";
 
 /**
  * Search for domains based on keyword
@@ -76,9 +77,16 @@ export async function searchDomains(
 /**
  * Real domain purchase flow via ResellerClub
  */
-export async function purchaseDomain(domainName: string, billingData: any) {
+export async function purchaseDomain(
+  domainName: string,
+  billingData: BillingData,
+  years: number = 1,
+  discountAmount: number = 0,
+) {
   try {
-    console.log(`[actions] Purchasing domain: ${domainName}`);
+    console.log(
+      `[actions] Purchasing domain: ${domainName} (${years} years, discount: ${discountAmount})`,
+    );
 
     const { headers } = await import("next/headers");
     const { auth } = await import("@/modules/auth/infrastructure/auth-server");
@@ -104,21 +112,36 @@ export async function purchaseDomain(domainName: string, billingData: any) {
 
     // 2. Prepare ResellerClub Customer Data
     // We use session info + billing info from form
+    // Sanitize phone: ensure it has a code and number
+    let phoneCode = "1";
+    let phoneNumber = "0000000000";
+
+    if (userRecord.phoneNumber) {
+      const parts = userRecord.phoneNumber.split("-");
+      if (parts.length > 1) {
+        phoneCode = parts[0].replace("+", "").trim();
+        phoneNumber = parts[1].replace(/[^0-9]/g, "");
+      } else {
+        phoneNumber = userRecord.phoneNumber.replace(/[^0-9]/g, "");
+      }
+    }
+
     const rcCustomerData = {
       username: userRecord.email,
-      name: billingData.name || userRecord.name,
-      company: userRecord.companyName || billingData.name || userRecord.name,
-      addressLine1: billingData.address,
-      city: billingData.city,
-      state: billingData.state,
-      country: billingData.countryCode, // RC needs ISO country code
-      zipcode: billingData.zipcode,
-      phoneCountryCode:
-        userRecord.phoneNumber?.split("-")[0]?.replace("+", "") || "1",
-      phone:
-        userRecord.phoneNumber?.split("-")[1] ||
-        userRecord.phoneNumber?.replace(/[^0-9]/g, "") ||
-        "0000000000",
+      name: billingData.name || userRecord.name || "Customer",
+      company:
+        userRecord.companyName ||
+        billingData.company ||
+        billingData.name ||
+        userRecord.name ||
+        "Company",
+      addressLine1: billingData.address || "No Address Provided",
+      city: billingData.city || "No City",
+      state: billingData.state || billingData.stateCode || "No State",
+      country: billingData.countryCode || billingData.country || "US", // RC needs ISO country code
+      zipcode: billingData.zipcode?.replace(/\s/g, "") || "00000",
+      phoneCountryCode: phoneCode,
+      phone: phoneNumber,
       langPref: "en",
     };
 
@@ -126,6 +149,7 @@ export async function purchaseDomain(domainName: string, billingData: any) {
 
     // 3. Create RC Customer if not exists
     if (!customerId) {
+      console.log(`[actions] Creating new RC customer for ${userRecord.email}`);
       const signupResult = await createResellerClubCustomer(rcCustomerData);
       if (!signupResult.success || !signupResult.customerId) {
         throw new Error(
@@ -142,6 +166,7 @@ export async function purchaseDomain(domainName: string, billingData: any) {
     }
 
     // 4. Create Contact for this specific registration
+    console.log(`[actions] Creating RC contact for customer ${customerId}`);
     const contactResult = await createResellerClubContact(
       customerId,
       rcCustomerData,
@@ -154,11 +179,15 @@ export async function purchaseDomain(domainName: string, billingData: any) {
     const contactId = contactResult.contactId;
 
     // 5. Actually register the domain
+    console.log(
+      `[actions] Registering ${domainName} for ${years} years (Contact: ${contactId})`,
+    );
     const regResult = await registerDomain(
       domainName,
       customerId,
       contactId,
-      1,
+      years,
+      discountAmount,
     );
 
     if (!regResult.success || !regResult.orderId) {
@@ -166,8 +195,9 @@ export async function purchaseDomain(domainName: string, billingData: any) {
     }
 
     // 6. Save successful registration to our database
+    const domainId = crypto.randomUUID();
     await db.insert(domain).values({
-      id: crypto.randomUUID(),
+      id: domainId,
       userId: session.user.id,
       name: domainName,
       orderId: regResult.orderId,
@@ -177,20 +207,57 @@ export async function purchaseDomain(domainName: string, billingData: any) {
       updatedAt: new Date(),
     });
 
-    return {
-      success: true,
-      message: `Domain ${domainName} has been registered successfully!`,
-      orderId: regResult.orderId,
-    };
+    revalidatePath("/domains");
+
+    return { success: true, orderId: regResult.orderId, id: domainId };
   } catch (error) {
-    console.error("[actions] purchaseDomain error:", error);
+    console.error(`[actions] purchaseDomain error:`, error);
     return {
       success: false,
-      error:
-        error instanceof Error
-          ? error.message
-          : "Registration failed. Please contact support.",
+      error: error instanceof Error ? error.message : "Unknown error",
     };
+  }
+}
+
+/**
+ * Fetch user profile data to prefill billing information
+ */
+export async function getUserProfileForBilling() {
+  try {
+    const { headers } = await import("next/headers");
+    const { auth } = await import("@/modules/auth/infrastructure/auth-server");
+    const session = await auth.api.getSession({
+      headers: await headers(),
+    });
+
+    if (!session?.user?.id) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    const { db } = await import("@/shared/infrastructure/database/db-client");
+    const { user } = await import("@/shared/infrastructure/database/schemas");
+    const { eq } = await import("drizzle-orm");
+
+    const userRecord = await db.query.user.findFirst({
+      where: eq(user.id, session.user.id),
+    });
+
+    if (!userRecord) return { success: false, error: "User not found" };
+
+    return {
+      success: true,
+      profile: {
+        name: userRecord.name || "",
+        email: userRecord.email || "",
+        company: userRecord.companyName || "",
+        phoneNumber: userRecord.phoneNumber || "",
+        // If there's location data in the user table, we could add it here
+        // For now, let's assume we might need to extend the user schema if we want more
+      },
+    };
+  } catch (error) {
+    console.error("[actions] getUserProfileForBilling error:", error);
+    return { success: false, error: "Failed to fetch profile" };
   }
 }
 

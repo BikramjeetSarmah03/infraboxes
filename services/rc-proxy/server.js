@@ -9,7 +9,7 @@ const PROXY_TOKEN = process.env.PROXY_TOKEN;
 // API base URLs (production only)
 // API base URLs
 const IS_TEST = process.env.RESELLERCLUB_IS_TEST === "true";
-const RC_BASE_URL = true 
+const RC_BASE_URL = IS_TEST 
   ? "https://test.httpapi.com/api"
   : "https://httpapi.com/api";
 const RC_DOMAINCHECK_URL = IS_TEST
@@ -319,17 +319,17 @@ app.post("/customers/signup", requireAuth, async (req, res) => {
   const params = new URLSearchParams();
   params.append("auth-userid", RESELLERCLUB_AUTH_USER_ID);
   params.append("api-key", RESELLERCLUB_API_KEY);
-  params.append("username", username);
+  params.append("username", username.trim());
   params.append("passwd", password);
-  params.append("name", name);
-  params.append("company", company);
-  params.append("address-line-1", addressLine1);
-  params.append("city", city);
-  params.append("state", state);
-  params.append("country", country);
-  params.append("zipcode", zipcode);
-  params.append("phone-cc", phoneCountryCode);
-  params.append("phone", phone);
+  params.append("name", name.trim());
+  params.append("company", company.trim());
+  params.append("address-line-1", addressLine1.trim());
+  params.append("city", city.trim());
+  params.append("state", state.trim());
+  params.append("country", country.trim().toUpperCase());
+  params.append("zipcode", zipcode.replace(/\s/g, "").trim());
+  params.append("phone-cc", phoneCountryCode.replace(/\D/g, ""));
+  params.append("phone", phone.replace(/\D/g, ""));
   params.append("lang-pref", langPref || "en");
 
   const url = `${RC_BASE_URL}/customers/v2/signup.json?${params.toString()}`;
@@ -468,6 +468,93 @@ app.get("/customers/details", requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * GET /domains/details-by-name
+ * Get domain registration details by domain name
+ */
+app.get("/domains/details-by-name", requireAuth, async (req, res) => {
+  const { domain_name, domainName } = req.query ?? {};
+  const actualDomainName = domain_name || domainName;
+
+  if (!actualDomainName) {
+    return res.status(400).json({ error: "domain_name is required" });
+  }
+
+  if (!RESELLERCLUB_AUTH_USER_ID || !RESELLERCLUB_API_KEY) {
+    return res.status(500).json({ error: "Missing ResellerClub credentials" });
+  }
+
+  const params = new URLSearchParams();
+  params.append("auth-userid", RESELLERCLUB_AUTH_USER_ID);
+  params.append("api-key", RESELLERCLUB_API_KEY);
+  params.append("domain-name", String(actualDomainName));
+  params.append("options", "All"); // Get all details
+
+  const url = `${BASE_URL}/domains/details-by-name.json?${params.toString()}`;
+  logOutgoingRequest(url, "GET");
+
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: UPSTREAM_HEADERS,
+    });
+    const body = await response.text();
+    const contentType = response.headers.get("content-type");
+
+    logUpstreamDiagnostics("/domains/details-by-name", response.status, contentType, body);
+
+    if (contentType) res.set("content-type", contentType);
+    res.status(response.status).send(body);
+  } catch (error) {
+    console.error("[domains/details-by-name] Error:", error);
+    res.status(502).json({ error: "Failed to reach ResellerClub" });
+  }
+});
+
+/**
+ * GET /domains/details
+ * Get domain details by order ID
+ */
+app.get("/domains/details", requireAuth, async (req, res) => {
+  const { order_id, orderId, "order-id": orderIdDash } = req.query ?? {};
+  const actualOrderId = order_id || orderId || orderIdDash;
+
+  if (!actualOrderId) {
+    return res.status(400).json({ error: "order_id is required" });
+  }
+
+  if (!RESELLERCLUB_AUTH_USER_ID || !RESELLERCLUB_API_KEY) {
+    return res.status(500).json({ error: "Missing ResellerClub credentials" });
+  }
+
+  const params = new URLSearchParams();
+  params.append("auth-userid", RESELLERCLUB_AUTH_USER_ID);
+  params.append("api-key", RESELLERCLUB_API_KEY);
+  params.append("order-id", String(actualOrderId));
+  params.append("options", "All");
+
+  const url = `${BASE_URL}/domains/details.json?${params.toString()}`;
+  logOutgoingRequest(url, "GET");
+
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: UPSTREAM_HEADERS,
+    });
+    const body = await response.text();
+    const contentType = response.headers.get("content-type");
+
+    logUpstreamDiagnostics("/domains/details", response.status, contentType, body);
+
+    if (contentType) res.set("content-type", contentType);
+    res.status(response.status).send(body);
+  } catch (error) {
+    console.error("[domains/details] Error:", error);
+    res.status(502).json({ error: "Failed to reach ResellerClub" });
+  }
+});
+
+
 // ============================================
 // Domain Registration Endpoints
 // ============================================
@@ -482,8 +569,12 @@ app.get("/customers/details", requireAuth, async (req, res) => {
 app.post("/domains/register", requireAuth, async (req, res) => {
   const {
     domainName,
+    "domain-name": domainNameDash,
+    domain_name,
     years,
     customerId,
+    customer_id,
+    "customer-id": customerIdDash,
     regContactId,
     adminContactId,
     techContactId,
@@ -493,9 +584,12 @@ app.post("/domains/register", requireAuth, async (req, res) => {
     discountAmount,
   } = req.body ?? {};
 
+  const actualDomainName = domainName || domainNameDash || domain_name;
+  const actualCustomerId = customerId || customer_id || customerIdDash;
+
   if (
-    !domainName ||
-    !customerId ||
+    !actualDomainName ||
+    !actualCustomerId ||
     !regContactId ||
     !adminContactId ||
     !techContactId ||
@@ -517,19 +611,26 @@ app.post("/domains/register", requireAuth, async (req, res) => {
     return res.status(500).json({ error: "Missing ResellerClub credentials" });
   }
 
-  const params = new URLSearchParams();
-  params.append("auth-userid", RESELLERCLUB_AUTH_USER_ID);
-  params.append("api-key", RESELLERCLUB_API_KEY);
-  params.append("domain-name", domainName);
-  params.append("years", String(years || 1));
-  params.append("customer-id", String(customerId));
-  params.append("reg-contact-id", String(regContactId));
-  params.append("admin-contact-id", String(adminContactId));
-  params.append("tech-contact-id", String(techContactId));
-  params.append("billing-contact-id", String(billingContactId));
-  params.append("invoice-option", invoiceOption || "NoInvoice");
-  params.append("discount-amount", String(discountAmount ?? 0.0));
-  nameServers.forEach((ns) => params.append("ns", ns.trim()));
+  const params = new URLSearchParams({
+    "auth-userid": RESELLERCLUB_AUTH_USER_ID,
+    "api-key": RESELLERCLUB_API_KEY,
+    "domain-name": actualDomainName,
+    years: String(years || 1),
+    ns: Array.isArray(nameServers) ? nameServers[0] : "ns1.dns-parking.com",
+    "customer-id": String(actualCustomerId),
+    "reg-contact-id": String(regContactId),
+    "admin-contact-id": String(adminContactId),
+    "tech-contact-id": String(techContactId),
+    "billing-contact-id": String(billingContactId),
+    "invoice-option": invoiceOption || "NoInvoice",
+    "discount-amount": String(discountAmount || 0),
+  });
+
+  if (Array.isArray(nameServers) && nameServers.length > 1) {
+    for (let i = 1; i < nameServers.length; i++) {
+      params.append("ns", nameServers[i]);
+    }
+  }
 
   const url = `${RC_BASE_URL}/domains/register.json?${params.toString()}`;
   logOutgoingRequest(url, "POST");
@@ -613,16 +714,16 @@ app.post("/contacts/add", requireAuth, async (req, res) => {
   const params = new URLSearchParams();
   params.append("auth-userid", RESELLERCLUB_AUTH_USER_ID);
   params.append("api-key", RESELLERCLUB_API_KEY);
-  params.append("name", name);
-  params.append("company", company);
-  params.append("email", email);
-  params.append("address-line-1", addressLine1);
-  params.append("city", city);
-  params.append("state", state);
-  params.append("country", country);
-  params.append("zipcode", zipcode);
-  params.append("phone-cc", phoneCountryCode);
-  params.append("phone", phone);
+  params.append("name", name.trim());
+  params.append("company", company.trim());
+  params.append("email", email.trim());
+  params.append("address-line-1", addressLine1.trim());
+  params.append("city", city.trim());
+  params.append("state", state.trim());
+  params.append("country", country.trim().toUpperCase());
+  params.append("zipcode", zipcode.replace(/\s/g, "").trim());
+  params.append("phone-cc", phoneCountryCode.replace(/\D/g, ""));
+  params.append("phone", phone.replace(/\D/g, ""));
   params.append("customer-id", String(customerId));
   params.append("type", type || "Contact");
 
@@ -708,84 +809,6 @@ app.get("/dns/records", requireAuth, async (req, res) => {
 // Contact Endpoints
 // ============================================
 
-/**
- * Create a contact for domain registration
- * POST /contacts/add
- * Body: { customerId, name, company, email, addressLine1, city, state, country, zipcode, phoneCountryCode, phone, type }
- */
-app.post("/contacts/add", requireAuth, async (req, res) => {
-  const {
-    customerId,
-    name,
-    company,
-    email,
-    addressLine1,
-    city,
-    state,
-    country,
-    zipcode,
-    phoneCountryCode,
-    phone,
-    type,
-  } = req.body ?? {};
-
-  if (
-    !customerId ||
-    !name ||
-    !email ||
-    !addressLine1 ||
-    !city ||
-    !country ||
-    !zipcode ||
-    !phone
-  ) {
-    return res.status(400).json({ error: "Missing required contact fields" });
-  }
-
-  if (!RESELLERCLUB_AUTH_USER_ID || !RESELLERCLUB_API_KEY) {
-    return res.status(500).json({ error: "Missing ResellerClub credentials" });
-  }
-
-  const params = new URLSearchParams();
-  params.append("auth-userid", RESELLERCLUB_AUTH_USER_ID);
-  params.append("api-key", RESELLERCLUB_API_KEY);
-  params.append("customer-id", customerId);
-  params.append("name", name);
-  params.append("company", company || name);
-  params.append("email", email);
-  params.append("address-line-1", addressLine1);
-  params.append("city", city);
-  params.append("state", state || city);
-  params.append("country", country);
-  params.append("zipcode", zipcode);
-  params.append("phone-cc", phoneCountryCode || "1");
-  params.append("phone", phone);
-  params.append("type", type || "Contact");
-
-  const url = `https://httpapi.com/api/contacts/add.json?${params.toString()}`;
-
-  console.log("[contacts/add] Creating contact for customer:", customerId);
-
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: UPSTREAM_HEADERS,
-    });
-    const body = await response.text();
-    const contentType = response.headers.get("content-type");
-
-    logUpstreamDiagnostics("/contacts/add", response.status, contentType, body);
-
-    if (contentType) {
-      res.set("content-type", contentType);
-    }
-
-    res.status(response.status).send(body);
-  } catch (error) {
-    console.error("[contacts/add] Error:", error);
-    res.status(502).json({ error: "Failed to reach ResellerClub" });
-  }
-});
 
 // ============================================
 // Domain Registration Endpoints
@@ -796,75 +819,6 @@ app.post("/contacts/add", requireAuth, async (req, res) => {
  * POST /domains/register
  * Body: { domainName, years, customerId, regContactId, adminContactId, techContactId, billingContactId, nameServers, invoiceOption }
  */
-app.post("/domains/register", requireAuth, async (req, res) => {
-  const {
-    domainName,
-    years,
-    customerId,
-    regContactId,
-    adminContactId,
-    techContactId,
-    billingContactId,
-    nameServers,
-    invoiceOption,
-  } = req.body ?? {};
-
-  if (!domainName || !customerId || !regContactId) {
-    return res.status(400).json({
-      error: "Missing required fields: domainName, customerId, regContactId",
-    });
-  }
-
-  if (!RESELLERCLUB_AUTH_USER_ID || !RESELLERCLUB_API_KEY) {
-    return res.status(500).json({ error: "Missing ResellerClub credentials" });
-  }
-
-  const params = new URLSearchParams();
-  params.append("auth-userid", RESELLERCLUB_AUTH_USER_ID);
-  params.append("api-key", RESELLERCLUB_API_KEY);
-  params.append("domain-name", domainName);
-  params.append("years", String(years || 1));
-  params.append("customer-id", customerId);
-  params.append("reg-contact-id", regContactId);
-  params.append("admin-contact-id", adminContactId || regContactId);
-  params.append("tech-contact-id", techContactId || regContactId);
-  params.append("billing-contact-id", billingContactId || regContactId);
-  params.append("invoice-option", invoiceOption || "NoInvoice");
-
-  // Add nameservers
-  const ns = nameServers || ["ns1.dns-parking.com", "ns2.dns-parking.com"];
-  ns.forEach((nameserver) => {
-    params.append("ns", nameserver);
-  });
-
-  const url = `https://httpapi.com/api/domains/register.json?${params.toString()}`;
-  logOutgoingRequest(url, "POST");
-
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: UPSTREAM_HEADERS,
-    });
-    const body = await response.text();
-    const contentType = response.headers.get("content-type");
-
-    logUpstreamDiagnostics(
-      "/domains/register",
-      response.status,
-      contentType,
-      body,
-    );
-
-    if (contentType) {
-      res.set("content-type", contentType);
-    }
-
-    res.status(response.status).send(body);
-  } catch (error) {
-    console.error("[domains/register] Error:", error);
-    res.status(502).json({ error: "Failed to reach ResellerClub" });
-  }
-});
 
 // ============================================
 // Google Workspace Endpoints
@@ -1117,10 +1071,11 @@ app.post("/googleapps/admin/add", requireAuth, async (req, res) => {
  * Activate DNS service for a domain order
  */
 app.post("/dns/activate", requireAuth, async (req, res) => {
-  const { order_id } = req.body ?? {};
+  const { order_id, orderId, "order-id": orderIdDash } = req.body ?? {};
+  const actualOrderId = order_id || orderId || orderIdDash;
 
-  if (!order_id) {
-    return res.status(400).json({ error: "order_id is required" });
+  if (!actualOrderId) {
+    return res.status(400).json({ error: "order_id, orderId, or order-id is required" });
   }
 
   if (!RESELLERCLUB_AUTH_USER_ID || !RESELLERCLUB_API_KEY) {
@@ -1130,9 +1085,9 @@ app.post("/dns/activate", requireAuth, async (req, res) => {
   const params = new URLSearchParams();
   params.append("auth-userid", RESELLERCLUB_AUTH_USER_ID);
   params.append("api-key", RESELLERCLUB_API_KEY);
-  params.append("order-id", String(order_id));
+  params.append("order-id", String(actualOrderId));
 
-  const url = `${RC_DNS_URL}/activate.xml?${params.toString()}`;
+  const url = `${RC_DNS_URL}/activate.json?${params.toString()}`;
   logOutgoingRequest(url, "POST");
 
   try {
@@ -1162,16 +1117,26 @@ app.post("/dns/activate", requireAuth, async (req, res) => {
  */
 app.post("/dns/manage/add-record", requireAuth, async (req, res) => {
   const {
-    "order-id": orderId,
-    "domain-name": domainName,
-    "record-type": recordType,
+    "order-id": orderIdDash,
+    order_id,
+    orderId,
+    "domain-name": domainNameDash,
+    domain_name,
+    domainName,
+    "record-type": recordTypeDash,
+    record_type,
+    type,
     host,
     value,
     ttl,
     priority,
   } = req.body ?? {};
 
-  if (!orderId || !domainName || !recordType || !host || !value) {
+  const actualOrderId = orderIdDash || order_id || orderId;
+  const actualDomainName = domainNameDash || domain_name || domainName;
+  const actualRecordType = recordTypeDash || record_type || type;
+
+  if (!actualOrderId || !actualDomainName || !actualRecordType || !host || !value) {
     return res.status(400).json({
       error: "order-id, domain-name, record-type, host, and value are required",
     });
@@ -1337,12 +1302,22 @@ app.get("/dns/manage/search-records", requireAuth, async (req, res) => {
  */
 app.post("/dns/manage/delete-record", requireAuth, async (req, res) => {
   const {
-    "order-id": orderId,
-    "domain-name": domainName,
-    "record-id": recordId,
+    "order-id": orderIdDash,
+    order_id,
+    orderId,
+    "domain-name": domainNameDash,
+    domain_name,
+    domainName,
+    "record-id": recordIdDash,
+    record_id,
+    recordId,
   } = req.body ?? {};
 
-  if (!orderId || !domainName || !recordId) {
+  const actualOrderId = orderIdDash || order_id || orderId;
+  const actualDomainName = domainNameDash || domain_name || domainName;
+  const actualRecordId = recordIdDash || record_id || recordId;
+
+  if (!actualOrderId || !actualDomainName || !actualRecordId) {
     return res
       .status(400)
       .json({ error: "order-id, domain-name, and record-id are required" });

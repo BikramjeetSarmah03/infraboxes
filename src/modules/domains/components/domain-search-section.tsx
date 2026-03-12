@@ -17,8 +17,8 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { searchDomains } from "../actions/domain-actions";
 import type { DomainAvailability } from "../domain-types";
-import { SUPPORTED_TLDS } from "../infrastructure/resellerclub-provider";
 import { DomainResultsList } from "./domain-results-list";
+import { SUPPORTED_TLDS } from "../constants/domain-constants";
 
 export function DomainSearchSection({
   onSelectDomain,

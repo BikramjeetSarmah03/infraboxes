@@ -4,7 +4,6 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertTriangle,
   ArrowLeft,
-  ChevronDown,
   Globe,
   Loader2,
   Plus,
@@ -14,8 +13,9 @@ import {
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,18 +42,31 @@ import {
   listDnsRecords,
   addDnsRecord,
   deleteDnsRecord,
+  activateDns,
 } from "../actions/dns-actions";
 import type { domain } from "@/shared/infrastructure/database/schemas";
 
 type Domain = typeof domain.$inferSelect;
 
 interface RemoteRecord {
+  id?: string;
   type: string;
   host: string;
   value: string;
   ttl: string | number;
   priority?: string | number;
 }
+
+const TYPE_COLORS: Record<string, string> = {
+  A: "bg-blue-50 text-blue-600 border-blue-100 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-900/30",
+  AAAA: "bg-indigo-50 text-indigo-600 border-indigo-100 dark:bg-indigo-900/20 dark:text-indigo-400 dark:border-indigo-900/30",
+  CNAME:
+    "bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-900/30",
+  MX: "bg-purple-50 text-purple-600 border-purple-100 dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-900/30",
+  TXT: "bg-amber-50 text-amber-600 border-amber-100 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-900/30",
+  NS: "bg-zinc-50 text-zinc-600 border-zinc-100 dark:bg-zinc-900/20 dark:text-zinc-400 dark:border-zinc-900/30",
+  SRV: "bg-rose-50 text-rose-600 border-rose-100 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-900/30",
+};
 
 const dnsRecordSchema = z.object({
   type: z.enum(["A", "AAAA", "MX", "CNAME", "TXT", "SRV", "NS"]),
@@ -111,7 +124,7 @@ export function DnsRecordDetailsContainer({
     },
   });
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
       const [domainRes, recordsRes] = await Promise.all([
@@ -122,20 +135,25 @@ export function DnsRecordDetailsContainer({
       if (domainRes.success) setDomainData(domainRes.domain || null);
       if (recordsRes.success) setRecords(recordsRes.records || []);
       else toast.error(recordsRes.error || "Failed to fetch records");
-    } catch (error) {
+    } catch {
       toast.error("An error occurred while fetching data");
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [domainId]);
 
   useEffect(() => {
     fetchData();
-  }, [domainId]);
+  }, [fetchData]);
 
   const onProvisionSubmit = async (values: DnsFormValues) => {
     setIsSaving(true);
     try {
+      // Auto-activate if not already active
+      if (!domainData?.isDnsActivated) {
+        await activateDns(domainId);
+      }
+      
       const res = await addDnsRecord(
         domainId,
         values.type,
@@ -153,7 +171,7 @@ export function DnsRecordDetailsContainer({
       } else {
         toast.error(res.error || "Failed to add record");
       }
-    } catch (error) {
+    } catch {
       toast.error("Failed to add record");
     } finally {
       setIsSaving(false);
@@ -167,6 +185,7 @@ export function DnsRecordDetailsContainer({
     try {
       const res = await deleteDnsRecord(
         domainId,
+        record.id || "",
         record.type,
         record.host,
         record.value
@@ -178,8 +197,25 @@ export function DnsRecordDetailsContainer({
       } else {
         toast.error(res.error || "Failed to delete record");
       }
-    } catch (error) {
+    } catch {
       toast.error("Failed to delete record");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleActivateDns = async () => {
+    setIsSaving(true);
+    try {
+      const res = await activateDns(domainId);
+      if (res.success) {
+        toast.success("DNS Infrastructure Activated");
+        fetchData();
+      } else {
+        toast.error(res.error || "Activation failed");
+      }
+    } catch {
+      toast.error("An error occurred during activation");
     } finally {
       setIsSaving(false);
     }
@@ -263,15 +299,26 @@ export function DnsRecordDetailsContainer({
             <div className="size-10 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-amber-600 dark:text-amber-500 shrink-0 border border-amber-200 dark:border-amber-800 shadow-none">
               <AlertTriangle className="size-5" />
             </div>
-            <div className="space-y-1">
-              <h4 className="text-sm font-medium text-amber-900 dark:text-amber-400 uppercase tracking-tight">
-                Action Required: Activation Pending
+            <div className="flex-1 space-y-1">
+              <h4 className="text-sm font-black text-amber-900 dark:text-amber-400 uppercase tracking-tight">
+                Infrastructure Activation Required
               </h4>
-              <p className="text-[11px] text-amber-800/80 dark:text-amber-500/70 font-medium uppercase tracking-widest leading-relaxed">
-                DNS management is currently idle. System will automatically
-                provision infrastructure upon your first record interaction.
+              <p className="text-[11px] text-amber-800/80 dark:text-amber-500/70 font-bold uppercase tracking-widest leading-relaxed">
+                DNS services are currently idle. Manual activation is required
+                to begin managing records for this domain.
               </p>
             </div>
+            <Button
+              size="sm"
+              onClick={handleActivateDns}
+              disabled={isSaving}
+              className="mt-1 h-9 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-[9px] uppercase tracking-widest shadow-lg shadow-amber-600/20 shrink-0"
+            >
+              {isSaving ? (
+                <Loader2 className="size-3.5 animate-spin mr-2" />
+              ) : null}
+              Activate Now
+            </Button>
           </motion.div>
         )}
 
@@ -483,10 +530,20 @@ export function DnsRecordDetailsContainer({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-100 dark:divide-zinc-900">
-                    {records.map((record, i) => (
-                      <tr key={i} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/50 transition-colors group">
+                    {records.map((record) => (
+                      <tr
+                        key={record.id || `${record.type}-${record.host}-${record.value}`}
+                        className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/50 transition-colors group"
+                      >
                         <td className="px-8 py-4">
-                          <Badge variant="outline" className="font-medium text-[10px] rounded px-2 py-0.5 border-zinc-200 dark:border-zinc-800 uppercase">
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "font-bold text-[9px] rounded-md px-2 py-0.5 uppercase tracking-widest border shadow-none",
+                              TYPE_COLORS[record.type] ||
+                                "bg-zinc-50 text-zinc-600 border-zinc-100"
+                            )}
+                          >
                             {record.type}
                           </Badge>
                         </td>
@@ -497,6 +554,7 @@ export function DnsRecordDetailsContainer({
                           <button
                             onClick={() => handleDeleteRecord(record)}
                             disabled={isSaving}
+                            type="button"
                             className="p-2 text-zinc-300 hover:text-red-500 transition-colors disabled:opacity-50"
                           >
                             <Trash2 className="size-4" />

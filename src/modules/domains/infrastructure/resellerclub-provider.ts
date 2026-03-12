@@ -13,8 +13,10 @@ import {
 import type {
   DomainAvailability,
   DomainSuggestion,
+  RCPricingResponse,
   ResellerClubConfig,
   ResellerClubCustomerData,
+  DNSRecord,
 } from "../domain-types";
 
 const config: ResellerClubConfig = {
@@ -30,7 +32,6 @@ const IS_TEST = process.env.RESELLERCLUB_IS_TEST === "true";
 const BASE_URL = IS_TEST
   ? "https://test.httpapi.com/api"
   : "https://httpapi.com/api";
-const SUGGEST_API = `${BASE_URL}/domains/v5/suggest-names.json`;
 // Note: Suggest API and Availability API use different subdomains in production but test is unified
 const AVAILABILITY_API = IS_TEST
   ? `${BASE_URL}/domains/available.json`
@@ -63,13 +64,13 @@ async function getBasePricing(customerId?: string) {
   if (pricingCache[cacheKey]) return pricingCache[cacheKey];
 
   try {
-    let data: any;
+    let data: RCPricingResponse;
 
     if (config.proxyUrl && config.proxyToken) {
       const url = new URL(`${config.proxyUrl}/products/customer-price`);
-      Object.values(TLD_PRODUCT_MAP).forEach((pk) =>
-        url.searchParams.append("product-key", pk),
-      );
+      Object.values(TLD_PRODUCT_MAP).forEach((pk) => {
+        url.searchParams.append("product-key", pk);
+      });
       if (customerId) {
         url.searchParams.append("customer-id", customerId);
       }
@@ -90,9 +91,9 @@ async function getBasePricing(customerId?: string) {
         "auth-userid": config.authUserId,
         "api-key": config.apiKey,
       });
-      Object.values(TLD_PRODUCT_MAP).forEach((pk) =>
-        params.append("product-key", pk),
-      );
+      Object.values(TLD_PRODUCT_MAP).forEach((pk) => {
+        params.append("product-key", pk);
+      });
       if (customerId) {
         params.append("customer-id", customerId);
       }
@@ -351,7 +352,20 @@ export async function createResellerClubCustomer(
           "Content-Type": "application/json",
           Authorization: `Bearer ${config.proxyToken}`,
         },
-        body: JSON.stringify(payload),
+      body: JSON.stringify({
+        username: payload.username,
+        password: payload.password,
+        name: payload.name,
+        company: payload.company,
+        addressLine1: payload.addressLine1,
+        city: payload.city,
+        state: payload.state,
+        country: payload.country,
+        zipcode: payload.zipcode,
+        phoneCountryCode: payload.phoneCountryCode,
+        phone: payload.phone,
+        langPref: payload.langPref,
+      }),
       });
     } else {
       if (!config.authUserId || !config.apiKey) {
@@ -385,7 +399,7 @@ export async function createResellerClubCustomer(
     const result = await response.text();
 
     // RC returns customerId as a string if success, or an error object
-    if (response.ok && !isNaN(Number(result.trim()))) {
+    if (response.ok && !Number.isNaN(Number(result.trim()))) {
       return { customerId: result.trim(), success: true };
     } else {
       try {
@@ -424,11 +438,6 @@ export async function createResellerClubContact(
   try {
     let response: Response;
 
-    const payload = {
-      ...data,
-      "customer-id": customerId,
-      type: "Contact",
-    };
 
     if (config.proxyUrl && config.proxyToken) {
       const url = `${config.proxyUrl}/contacts/add`;
@@ -438,7 +447,20 @@ export async function createResellerClubContact(
           "Content-Type": "application/json",
           Authorization: `Bearer ${config.proxyToken}`,
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          customerId: customerId, // Use 'customerId' for proxy
+          name: data.name,
+          company: data.company,
+          email: data.username, // Use 'email' for proxy, mapping from data.username
+          addressLine1: data.addressLine1,
+          city: data.city,
+          state: data.state,
+          country: data.country,
+          zipcode: data.zipcode,
+          phoneCountryCode: data.phoneCountryCode,
+          phone: data.phone,
+          type: "Contact",
+        }),
       });
     } else {
       if (!config.authUserId || !config.apiKey) {
@@ -471,7 +493,7 @@ export async function createResellerClubContact(
 
     const result = await response.text();
 
-    if (response.ok && !isNaN(Number(result.trim()))) {
+    if (response.ok && !Number.isNaN(Number(result.trim()))) {
       return { contactId: result.trim(), success: true };
     } else {
       try {
@@ -508,6 +530,7 @@ export async function registerDomain(
   customerId: string,
   contactId: string,
   years: number = 1,
+  discountAmount: number = 0,
 ): Promise<{ success: boolean; orderId?: string; error?: string }> {
   try {
     let response: Response;
@@ -528,8 +551,9 @@ export async function registerDomain(
           techContactId: contactId,
           billingContactId: contactId,
           years,
-          ns: ["ns1.infraboxes.com", "ns2.infraboxes.com"], // Generic nameservers
+          nameServers: ["ns1.dns-parking.com", "ns2.dns-parking.com"], // Valid nameservers from legacy code
           invoiceOption: "KeepInvoice",
+          discountAmount,
         }),
       });
     } else {
@@ -542,16 +566,17 @@ export async function registerDomain(
         "api-key": config.apiKey,
         "domain-name": domainName,
         years: years.toString(),
-        ns: "ns1.infraboxes.com", // Add first NS
+        ns: "ns1.dns-parking.com", // Add first NS
         "customer-id": customerId,
         "reg-contact-id": contactId,
         "admin-contact-id": contactId,
         "tech-contact-id": contactId,
         "billing-contact-id": contactId,
         "invoice-option": "KeepInvoice",
+        "discount-amount": discountAmount.toString(),
       });
       // Append second NS
-      params.append("ns", "ns2.infraboxes.com");
+      params.append("ns", "ns2.dns-parking.com");
 
       const url = `${BASE_URL}/domains/register.json?${params.toString()}`;
       response = await fetch(url, {
@@ -583,16 +608,73 @@ export async function registerDomain(
 }
 
 /**
- * List DNS records for a domain in ResellerClub
+ * Get domain registration details by domain name
  */
-export async function listDnsRecords(
+export async function getDomainDetailsByName(
   domainName: string,
-): Promise<{ success: boolean; records?: any[]; error?: string }> {
+): Promise<{
+  success: boolean;
+  details?: Record<string, unknown>;
+  error?: string;
+}> {
   try {
     let response: Response;
 
     if (config.proxyUrl && config.proxyToken) {
-      const url = `${config.proxyUrl}/dns/records/search?domainName=${domainName}`;
+      const url = `${config.proxyUrl}/domains/details-by-name?domain_name=${domainName}`;
+      response = await fetch(url, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${config.proxyToken}`,
+        },
+      });
+    } else {
+      if (!config.authUserId || !config.apiKey) {
+        return { success: false, error: "Missing config" };
+      }
+
+      const params = new URLSearchParams({
+        "auth-userid": config.authUserId,
+        "api-key": config.apiKey,
+        "domain-name": domainName,
+        options: "All",
+      });
+
+      const url = `${BASE_URL}/domains/details-by-name.json?${params.toString()}`;
+      response = await fetch(url, {
+        method: "GET",
+        headers: COMMON_HEADERS,
+      });
+    }
+
+    const result = await response.json();
+
+    if (response.ok && result.orderid) {
+      return { success: true, details: result };
+    } else {
+      return {
+        success: false,
+        error: result.message || result.error || "Domain not found",
+      };
+    }
+  } catch (error) {
+    console.error("[domains] Get domain details error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+export async function listDnsRecords(
+  domainName: string,
+  orderId?: string,
+): Promise<{ success: boolean; records?: DNSRecord[]; error?: string }> {
+  try {
+    let response: Response;
+
+    if (config.proxyUrl && config.proxyToken) {
+      const url = `${config.proxyUrl}/dns/manage/search-records?order_id=${orderId || ""}&domain_name=${domainName}`;
       response = await fetch(url, {
         headers: {
           Authorization: `Bearer ${config.proxyToken}`,
@@ -638,6 +720,7 @@ export async function listDnsRecords(
  */
 export async function addDnsRecord(
   domainName: string,
+  orderId: string,
   type: string,
   host: string,
   value: string,
@@ -663,14 +746,22 @@ export async function addDnsRecord(
       return { success: false, error: `Unsupported record type: ${type}` };
 
     if (config.proxyUrl && config.proxyToken) {
-      const url = `${config.proxyUrl}/dns/records/add`;
+      const url = `${config.proxyUrl}/dns/manage/add-record`;
       response = await fetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${config.proxyToken}`,
         },
-        body: JSON.stringify({ domainName, type, host, value, ttl, priority }),
+        body: JSON.stringify({
+          "order-id": orderId,
+          "domain-name": domainName,
+          "record-type": type,
+          host: host === "@" ? "" : host,
+          value,
+          ttl,
+          priority,
+        }),
       });
     } else {
       if (!config.authUserId || !config.apiKey) {
@@ -721,6 +812,8 @@ export async function addDnsRecord(
  */
 export async function deleteDnsRecord(
   domainName: string,
+  orderId: string,
+  recordId: string,
   type: string,
   host: string,
   value: string,
@@ -743,14 +836,18 @@ export async function deleteDnsRecord(
       return { success: false, error: `Unsupported record type: ${type}` };
 
     if (config.proxyUrl && config.proxyToken) {
-      const url = `${config.proxyUrl}/dns/records/delete`;
+      const url = `${config.proxyUrl}/dns/manage/delete-record`;
       response = await fetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${config.proxyToken}`,
         },
-        body: JSON.stringify({ domainName, type, host, value }),
+        body: JSON.stringify({
+          "order-id": orderId,
+          "domain-name": domainName,
+          "record-id": recordId,
+        }),
       });
     } else {
       if (!config.authUserId || !config.apiKey) {
@@ -784,6 +881,144 @@ export async function deleteDnsRecord(
     }
   } catch (error) {
     console.error("[domains] Delete DNS record error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+/**
+ * Activate DNS for a domain in ResellerClub
+ */
+export async function activateDns(
+  orderId: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    let response: Response;
+
+    if (config.proxyUrl && config.proxyToken) {
+      const url = `${config.proxyUrl}/dns/activate`;
+      response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${config.proxyToken}`,
+        },
+        body: JSON.stringify({
+          order_id: orderId, // Use snake_case for proxy consistency
+        }),
+      });
+    } else {
+      if (!config.authUserId || !config.apiKey) {
+        return { success: false, error: "Missing config" };
+      }
+
+      const params = new URLSearchParams({
+        "auth-userid": config.authUserId,
+        "api-key": config.apiKey,
+        "order-id": orderId,
+      });
+
+      const url = `${BASE_URL}/dns/manage/activate.json?${params.toString()}`;
+      response = await fetch(url, {
+        method: "POST",
+        headers: COMMON_HEADERS,
+      });
+    }
+
+    const contentType = response.headers.get("content-type");
+    let result: Record<string, unknown> = {};
+
+    if (contentType?.includes("application/json")) {
+      result = await response.json();
+    } else {
+      const text = await response.text();
+      try {
+        result = JSON.parse(text);
+      } catch {
+        // Fallback for success signals in plain text or other formats
+        if (response.ok && (text.includes("Success") || text.includes("true"))) {
+          return { success: true };
+        }
+        return {
+          success: false,
+          error: `Invalid response format: ${text.substring(0, 100)}`,
+        };
+      }
+    }
+
+    const resObj = result as Record<string, unknown>;
+    if (response.ok && resObj.status === "Success") {
+      return { success: true };
+    } else {
+      const errorMsg = resObj.message || resObj.error || "Failed to activate DNS";
+      return {
+        success: false,
+        error: typeof errorMsg === "string" ? errorMsg : "Failed to activate DNS",
+      };
+    }
+  } catch (error) {
+    console.error("[domains] Activate DNS error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+/**
+ * Get domain details by order ID
+ */
+export async function getDomainDetailsByOrderId(
+  orderId: string,
+): Promise<{
+  success: boolean;
+  details?: Record<string, unknown>;
+  error?: string;
+}> {
+  try {
+    let response: Response;
+
+    if (config.proxyUrl && config.proxyToken) {
+      const url = `${config.proxyUrl}/domains/details?order_id=${orderId}`;
+      response = await fetch(url, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${config.proxyToken}`,
+        },
+      });
+    } else {
+      if (!config.authUserId || !config.apiKey) {
+        return { success: false, error: "Missing config" };
+      }
+
+      const params = new URLSearchParams({
+        "auth-userid": config.authUserId,
+        "api-key": config.apiKey,
+        "order-id": orderId,
+        options: "All",
+      });
+
+      const url = `${BASE_URL}/domains/details.json?${params.toString()}`;
+      response = await fetch(url, {
+        method: "GET",
+        headers: COMMON_HEADERS,
+      });
+    }
+
+    const result = await response.json();
+
+    if (response.ok && result.orderid) {
+      return { success: true, details: result };
+    } else {
+      return {
+        success: false,
+        error: result.message || result.error || "Domain not found",
+      };
+    }
+  } catch (error) {
+    console.error("[domains] Get domain details by orderId error:", error);
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
