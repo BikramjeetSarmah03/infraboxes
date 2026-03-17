@@ -1040,19 +1040,6 @@ app.post("/googleapps/admin/add", requireAuth, async (req, res) => {
     zip,
   } = req.body ?? {};
 
-  if (!orderId || !emailAddress || !firstName || !lastName) {
-    return res.status(400).json({
-      error: "orderId, emailAddress, firstName, and lastName are required",
-    });
-  }
-
-  if (!RESELLERCLUB_AUTH_USER_ID || !RESELLERCLUB_API_KEY) {
-    return res.status(500).json({ error: "Missing ResellerClub credentials" });
-  }
-
-  const params = new URLSearchParams();
-  params.append("auth-userid", RESELLERCLUB_AUTH_USER_ID);
-  params.append("api-key", RESELLERCLUB_API_KEY);
   const actualOrderId =
     orderId ||
     req.body["order-id"] ||
@@ -1063,6 +1050,29 @@ app.post("/googleapps/admin/add", requireAuth, async (req, res) => {
 
   console.log(`[proxy] /googleapps/admin/add: Incoming Body=`, JSON.stringify(req.body));
   console.log(`[proxy] /googleapps/admin/add: Resolved ID=${actualOrderId}`);
+
+  const missingFields = [];
+  if (!actualOrderId) missingFields.push("orderId");
+  if (!emailAddress) missingFields.push("emailAddress");
+  if (!firstName) missingFields.push("firstName");
+  if (!lastName) missingFields.push("lastName");
+
+  if (missingFields.length > 0) {
+    console.error(`[proxy] /googleapps/admin/add: Missing required fields: ${missingFields.join(", ")}`);
+    return res.status(400).json({
+      error: `Missing required fields: ${missingFields.join(", ")}`,
+      missing: missingFields,
+      received: { orderId: actualOrderId, emailAddress, firstName, lastName }
+    });
+  }
+
+  if (!RESELLERCLUB_AUTH_USER_ID || !RESELLERCLUB_API_KEY) {
+    return res.status(500).json({ error: "Missing ResellerClub credentials" });
+  }
+
+  const params = new URLSearchParams();
+  params.append("auth-userid", RESELLERCLUB_AUTH_USER_ID);
+  params.append("api-key", RESELLERCLUB_API_KEY);
   
   // Send all possible variations to be extremely safe
   const idStr = String(actualOrderId || 0);
@@ -1182,10 +1192,28 @@ app.get("/googleapps/search", requireAuth, async (req, res) => {
 app.post("/googleapps/add-account", requireAuth, async (req, res) => {
   const { orderId, noOfAccounts, invoiceOption } = req.body ?? {};
 
-  if (!orderId || !noOfAccounts) {
-    return res
-      .status(400)
-      .json({ error: "orderId and noOfAccounts are required" });
+  const actualOrderId =
+    orderId ||
+    req.body["order-id"] ||
+    req.body["entity-id"] ||
+    req.body["entityId"] ||
+    req.body["entityid"] ||
+    req.body["orderid"];
+
+  console.log(`[proxy] /googleapps/add-account: Incoming Body=`, JSON.stringify(req.body));
+  console.log(`[proxy] /googleapps/add-account: Resolved ID=${actualOrderId}`);
+
+  const missingFields = [];
+  if (!actualOrderId) missingFields.push("orderId");
+  if (!noOfAccounts) missingFields.push("noOfAccounts");
+
+  if (missingFields.length > 0) {
+    console.error(`[proxy] /googleapps/add-account: Missing required fields: ${missingFields.join(", ")}`);
+    return res.status(400).json({ 
+      error: `Missing required fields: ${missingFields.join(", ")}`,
+      missing: missingFields,
+      received: { orderId: actualOrderId, noOfAccounts }
+    });
   }
 
   if (!RESELLERCLUB_AUTH_USER_ID || !RESELLERCLUB_API_KEY) {
@@ -1195,16 +1223,6 @@ app.post("/googleapps/add-account", requireAuth, async (req, res) => {
   const params = new URLSearchParams();
   params.append("auth-userid", RESELLERCLUB_AUTH_USER_ID);
   params.append("api-key", RESELLERCLUB_API_KEY);
-  const actualOrderId =
-    orderId ||
-    req.body["order-id"] ||
-    req.body["entity-id"] ||
-    req.body["entityId"] ||
-    req.body["entityid"] ||
-    req.body["orderid"];
-    
-  console.log(`[proxy] /googleapps/add-account: Incoming Body=`, JSON.stringify(req.body));
-  console.log(`[proxy] /googleapps/add-account: Resolved ID=${actualOrderId}`);
   
   const idStr = String(actualOrderId || 0);
   params.append("order-id", idStr);
