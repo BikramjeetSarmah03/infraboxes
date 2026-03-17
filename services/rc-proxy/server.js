@@ -1064,6 +1064,108 @@ app.post("/googleapps/admin/add", requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * Search Google Workspace orders
+ * GET /googleapps/search
+ * Query: { domainName, customerId, status, noOfRecords, pageNo }
+ *
+ * ResellerClub API: https://httpapi.com/api/gapps/in/search.json
+ */
+app.get("/googleapps/search", requireAuth, async (req, res) => {
+  const { domainName, customerId, status } = req.query ?? {};
+  const noOfRecords = Number.parseInt(req.query["no-of-records"] ?? "10", 10);
+  const pageNo = Number.parseInt(req.query["page-no"] ?? "1", 10);
+
+  if (!RESELLERCLUB_AUTH_USER_ID || !RESELLERCLUB_API_KEY) {
+    return res.status(500).json({ error: "Missing ResellerClub credentials" });
+  }
+
+  const params = new URLSearchParams();
+  params.append("auth-userid", RESELLERCLUB_AUTH_USER_ID);
+  params.append("api-key", RESELLERCLUB_API_KEY);
+  params.append("no-of-records", String(noOfRecords));
+  params.append("page-no", String(pageNo));
+  if (domainName) params.append("domain-name", domainName);
+  if (customerId) params.append("customer-id", customerId);
+  if (status) params.append("status", status);
+
+  const url = `${RC_BASE_URL}/gapps/in/search.json?${params.toString()}`;
+  logOutgoingRequest(url, "GET");
+
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: UPSTREAM_HEADERS,
+    });
+    const body = await response.text();
+    const contentType = response.headers.get("content-type");
+
+    logUpstreamDiagnostics(
+      "/googleapps/search",
+      response.status,
+      contentType,
+      body,
+    );
+
+    if (contentType) res.set("content-type", contentType);
+    res.status(response.status).send(body);
+  } catch (error) {
+    console.error("[googleapps/search] Error:", error);
+    res.status(502).json({ error: "Failed to reach ResellerClub" });
+  }
+});
+
+/**
+ * Add accounts/licenses to an existing Google Workspace order
+ * POST /googleapps/add-account
+ * Body: { orderId, noOfAccounts, invoiceOption }
+ *
+ * ResellerClub API: https://httpapi.com/api/gapps/in/add-account.json
+ */
+app.post("/googleapps/add-account", requireAuth, async (req, res) => {
+  const { orderId, noOfAccounts, invoiceOption } = req.body ?? {};
+
+  if (!orderId || !noOfAccounts) {
+    return res.status(400).json({ error: "orderId and noOfAccounts are required" });
+  }
+
+  if (!RESELLERCLUB_AUTH_USER_ID || !RESELLERCLUB_API_KEY) {
+    return res.status(500).json({ error: "Missing ResellerClub credentials" });
+  }
+
+  const params = new URLSearchParams();
+  params.append("auth-userid", RESELLERCLUB_AUTH_USER_ID);
+  params.append("api-key", RESELLERCLUB_API_KEY);
+  params.append("order-id", String(orderId));
+  params.append("no-of-accounts", String(noOfAccounts));
+  params.append("invoice-option", invoiceOption || "NoInvoice");
+
+  const url = `${RC_BASE_URL}/gapps/in/add-account.json?${params.toString()}`;
+  logOutgoingRequest(url, "POST");
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: UPSTREAM_HEADERS,
+    });
+    const body = await response.text();
+    const contentType = response.headers.get("content-type");
+
+    logUpstreamDiagnostics(
+      "/googleapps/add-account",
+      response.status,
+      contentType,
+      body,
+    );
+
+    if (contentType) res.set("content-type", contentType);
+    res.status(response.status).send(body);
+  } catch (error) {
+    console.error("[googleapps/add-account] Error:", error);
+    res.status(502).json({ error: "Failed to reach ResellerClub" });
+  }
+});
+
 // ===== DNS Management Endpoints =====
 
 /**

@@ -108,7 +108,40 @@ export async function listDnsRecords(domainId: string) {
       domainData.domain.orderId,
     );
 
-    return processListingResult(result);
+    const processedResult = processListingResult(result);
+
+    // Fetch local DB records to merge/fallback
+    const localRecords = await db.select().from(dnsRecord).where(eq(dnsRecord.domainId, domainId));
+    
+    // If upstream succeeds but is empty (or we have local records), let's ensure we merge what we have
+    if (processedResult.success) {
+      const mergedRecords = [...(processedResult.records || [])];
+      
+      // Add any local records that aren't in the remote list (matching by host + type + value)
+      for (const local of localRecords) {
+        const existsRemote = mergedRecords.find(
+          r => String(r.type).toUpperCase() === local.type.toUpperCase() && 
+               String(r.host) === local.host && 
+               String(r.value) === local.value
+        );
+        
+        if (!existsRemote) {
+          mergedRecords.push({
+            id: local.providerRecordId || local.id,
+            type: local.type,
+            host: local.host,
+            value: local.value,
+            ttl: Number(local.ttl),
+            priority: local.priority ? Number(local.priority) : undefined,
+            _source: 'local' // marker for debugging
+          });
+        }
+      }
+      
+      processedResult.records = mergedRecords;
+    }
+
+    return processedResult;
   } catch (error) {
     console.error("[dns-actions] listDnsRecords error:", error);
     return { success: false, error: "Failed to list DNS records" };
@@ -182,8 +215,30 @@ export async function addDnsRecord(
       priority,
     );
 
-    if (result.success && result.recordId) {
-      // Sync to local database
+    if (result.success) {
+      let recordId = result.recordId;
+
+      // Fallback: If RC didn't return an ID, try to find it in the current list
+      if (!recordId) {
+        console.log(`[dns-actions] recordId missing in response, searching in list...`);
+        const listRes = await listDnsRecords(domainId);
+        if (listRes.success && listRes.records) {
+          const found = listRes.records.find(
+            (r: any) =>
+              r.type.toUpperCase() === type.toUpperCase() &&
+              r.host === host &&
+              r.value === value,
+          );
+          if (found) {
+            recordId = String(found.id || "");
+            console.log(`[dns-actions] Found missing recordId: ${recordId}`);
+            // Update the result object so the caller gets the ID
+            result.recordId = recordId;
+          }
+        }
+      }
+
+      // Sync to local database even if providerRecordId is missing
       await db.insert(dnsRecord).values({
         id: crypto.randomUUID(),
         domainId,
@@ -192,7 +247,7 @@ export async function addDnsRecord(
         value,
         ttl: ttl.toString(),
         priority: priority?.toString() || null,
-        providerRecordId: result.recordId.toString(),
+        providerRecordId: recordId ? String(recordId) : null,
         createdAt: new Date(),
         updatedAt: new Date(),
       });
