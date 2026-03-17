@@ -861,13 +861,24 @@ app.post("/googleapps/order", requireAuth, async (req, res) => {
   params.append("no-of-accounts", String(noOfAccounts || 3)); // Default 3 accounts
   params.append("invoice-option", "NoInvoice");
 
-  const url = `${RC_BASE_URL}/gapps/in/add.json?${params.toString()}`;
-  logOutgoingRequest(url, "POST");
+  console.log(`[proxy] /googleapps/order: Incoming Body=`, JSON.stringify(req.body));
+  
+  const apiUrl = `${RC_BASE_URL}/gapps/in/add.json`;
+  logOutgoingRequest(apiUrl, "POST");
+
+  const logParams = new URLSearchParams(params);
+  logParams.set("auth-userid", "[REDACTED]");
+  logParams.set("api-key", "[REDACTED]");
+  console.log(`[proxy] /googleapps/order: Redacted Params Body=`, logParams.toString());
 
   try {
-    const response = await fetch(url, {
+    const response = await fetch(apiUrl, {
       method: "POST",
-      headers: UPSTREAM_HEADERS,
+      headers: {
+        ...UPSTREAM_HEADERS,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: params.toString(),
     });
     const body = await response.text();
     const contentType = response.headers.get("content-type");
@@ -917,13 +928,24 @@ app.post("/googleapps/add-user", requireAuth, async (req, res) => {
   params.append("first-name", firstName);
   params.append("last-name", lastName);
 
-  const url = `${RC_BASE_URL}/googleapps/add-user.json?${params.toString()}`;
-  logOutgoingRequest(url, "POST");
+  console.log(`[proxy] /googleapps/add-user: Incoming Body=`, JSON.stringify(req.body));
+  
+  const apiUrl = `${RC_BASE_URL}/googleapps/add-user.json`;
+  logOutgoingRequest(apiUrl, "POST");
+
+  const logParams = new URLSearchParams(params);
+  logParams.set("auth-userid", "[REDACTED]");
+  logParams.set("api-key", "[REDACTED]");
+  console.log(`[proxy] /googleapps/add-user: Redacted Params Body=`, logParams.toString());
 
   try {
-    const response = await fetch(url, {
+    const response = await fetch(apiUrl, {
       method: "POST",
-      headers: UPSTREAM_HEADERS,
+      headers: {
+        ...UPSTREAM_HEADERS,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: params.toString(),
     });
     const body = await response.text();
     const contentType = response.headers.get("content-type");
@@ -1035,11 +1057,26 @@ app.post("/googleapps/admin/add", requireAuth, async (req, res) => {
     orderId ||
     req.body["order-id"] ||
     req.body["entity-id"] ||
-    req.body["entityId"];
-  console.log(
-    `[proxy] /googleapps/admin/add: inputOrderId=${orderId}, resolved=${actualOrderId}, email=${emailAddress}`,
-  );
-  params.append("order-id", String(actualOrderId || 0));
+    req.body["entityId"] ||
+    req.body["entityid"] ||
+    req.body["orderid"];
+
+  console.log(`[proxy] /googleapps/admin/add: Incoming Body=`, JSON.stringify(req.body));
+  console.log(`[proxy] /googleapps/admin/add: Resolved ID=${actualOrderId}`);
+  
+  // Send all possible variations to be extremely safe
+  const idStr = String(actualOrderId || 0);
+  params.append("order-id", idStr);
+  params.append("entity-id", idStr);
+  params.append("entityId", idStr);
+  params.append("entityid", idStr);
+  params.append("orderid", idStr);
+  
+  const logParams = new URLSearchParams(params);
+  logParams.set("auth-userid", "[REDACTED]");
+  logParams.set("api-key", "[REDACTED]");
+  console.log(`[proxy] /googleapps/admin/add: Redacted Params Body=`, logParams.toString());
+  
   params.append("email-address", emailAddress);
   params.append("first-name", firstName);
   params.append("last-name", lastName);
@@ -1051,13 +1088,17 @@ app.post("/googleapps/admin/add", requireAuth, async (req, res) => {
   params.append("company", company || `${firstName} ${lastName}`);
   params.append("zip", zip || "00000");
 
-  const url = `${RC_BASE_URL}/gapps/in/admin/add.json?${params.toString()}`;
-  logOutgoingRequest(url, "POST");
+  const apiUrl = `${RC_BASE_URL}/gapps/in/admin/add.json`;
+  logOutgoingRequest(apiUrl, "POST");
 
   try {
-    const response = await fetch(url, {
+    const response = await fetch(apiUrl, {
       method: "POST",
-      headers: UPSTREAM_HEADERS,
+      headers: {
+        ...UPSTREAM_HEADERS,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: params.toString(),
     });
     const body = await response.text();
     const contentType = response.headers.get("content-type");
@@ -1158,22 +1199,39 @@ app.post("/googleapps/add-account", requireAuth, async (req, res) => {
     orderId ||
     req.body["order-id"] ||
     req.body["entity-id"] ||
-    req.body["entityId"];
-  console.log({ actualOrderId });
-  console.log(
-    `[proxy] /googleapps/add-account: inputOrderId=${orderId}, resolved=${actualOrderId}, count=${noOfAccounts}`,
-  );
-  params.append("order-id", String(actualOrderId || 0));
+    req.body["entityId"] ||
+    req.body["entityid"] ||
+    req.body["orderid"];
+    
+  console.log(`[proxy] /googleapps/add-account: Incoming Body=`, JSON.stringify(req.body));
+  console.log(`[proxy] /googleapps/add-account: Resolved ID=${actualOrderId}`);
+  
+  const idStr = String(actualOrderId || 0);
+  params.append("order-id", idStr);
+  params.append("entity-id", idStr);
+  params.append("entityId", idStr);
+  params.append("entityid", idStr);
+  params.append("orderid", idStr);
+  
+  const logParams = new URLSearchParams(params);
+  logParams.set("auth-userid", "[REDACTED]");
+  logParams.set("api-key", "[REDACTED]");
+  console.log(`[proxy] /googleapps/add-account: Redacted Params Body=`, logParams.toString());
+  
   params.append("no-of-accounts", String(noOfAccounts));
   params.append("invoice-option", invoiceOption || "NoInvoice");
 
-  const url = `${RC_BASE_URL}/gapps/in/add-account.json?${params.toString()}`;
-  logOutgoingRequest(url, "POST");
+  const apiUrl = `${RC_BASE_URL}/gapps/in/add-account.json`;
+  logOutgoingRequest(apiUrl, "POST");
 
   try {
-    const response = await fetch(url, {
+    const response = await fetch(apiUrl, {
       method: "POST",
-      headers: UPSTREAM_HEADERS,
+      headers: {
+        ...UPSTREAM_HEADERS,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: params.toString(),
     });
     const body = await response.text();
     const contentType = response.headers.get("content-type");

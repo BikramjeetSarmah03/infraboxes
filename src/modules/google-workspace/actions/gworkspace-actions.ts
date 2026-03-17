@@ -479,7 +479,10 @@ export async function setupWorkspacePrimaryAdmin(
 
     // 2. Reconciliation: If rcOrderId is "0" or invalid, try to find the real one
     let targetRcOrderId = order.rcOrderId;
-    const isInvalidId = !targetRcOrderId || targetRcOrderId === "0" || targetRcOrderId === 0 || targetRcOrderId === "undefined";
+    const isInvalidId =
+      !targetRcOrderId ||
+      targetRcOrderId === "0" ||
+      targetRcOrderId === "undefined";
     
     if (isInvalidId) {
       console.log(
@@ -524,10 +527,11 @@ export async function setupWorkspacePrimaryAdmin(
     }
 
     if (!targetRcOrderId || targetRcOrderId === "0" || targetRcOrderId === "undefined") {
+      console.warn(`[gworkspace] setupWorkspacePrimaryAdmin: FAILED RECONCILIATION. Domain=${order.domainName}, OriginalID=${order.rcOrderId}, Status=${order.status}`);
       throw new Error(`Could not determine real Order ID for workspace (current: ${targetRcOrderId})`);
     }
 
-    console.log(`[gworkspace] setupWorkspacePrimaryAdmin: Calling provider with rcOrderId=${targetRcOrderId}`);
+    console.log(`[gworkspace] setupWorkspacePrimaryAdmin: INVOKING PROVIDER. Domain=${order.domainName}, targetRcOrderId=${targetRcOrderId}`);
 
     // 3. Call provider to setup admin
     const setupResult = await setupAdminProvider({
@@ -814,7 +818,10 @@ export async function addWorkspaceLicensesAction(
 
     // 2. Reconciliation: If rcOrderId is "0" or invalid, try to find the real one
     let targetRcOrderId = order.rcOrderId;
-    const isInvalidId = !targetRcOrderId || targetRcOrderId === "0" || targetRcOrderId === 0 || targetRcOrderId === "undefined";
+    const isInvalidId =
+      !targetRcOrderId ||
+      targetRcOrderId === "0" ||
+      targetRcOrderId === "undefined";
     
     if (isInvalidId) {
       console.log(
@@ -859,10 +866,11 @@ export async function addWorkspaceLicensesAction(
     }
 
     if (!targetRcOrderId || targetRcOrderId === "0" || targetRcOrderId === "undefined") {
+      console.warn(`[gworkspace] addWorkspaceLicensesAction: FAILED RECONCILIATION. Domain=${order.domainName}, OriginalID=${order.rcOrderId}`);
       throw new Error(`Could not determine real Order ID for workspace (current: ${targetRcOrderId})`);
     }
 
-    console.log(`[gworkspace] addWorkspaceLicensesAction: Calling provider with rcOrderId=${targetRcOrderId}`);
+    console.log(`[gworkspace] addWorkspaceLicensesAction: INVOKING PROVIDER. Domain=${order.domainName}, targetRcOrderId=${targetRcOrderId}`);
 
     // 3. Call provider to add licenses
     const result = await addWorkspaceAccounts(targetRcOrderId, noOfAccounts);
