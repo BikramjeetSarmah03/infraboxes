@@ -1,29 +1,28 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import { auth } from "@/modules/auth/infrastructure/auth-server";
 import { headers } from "next/headers";
 import { db } from "@/shared/infrastructure/database/db-client";
-import { 
-  googleWorkspaceOrder, 
-  googleWorkspaceMailbox, 
-  user as userSchema, 
-  domain as domainSchema 
+import {
+  googleWorkspaceOrder,
+  googleWorkspaceMailbox,
+  user as userSchema,
+  domain as domainSchema,
 } from "@/shared/infrastructure/database/schemas";
-import { 
-  orderWorkspace, 
-  setupWorkspaceAdmin as setupAdminProvider, 
-  addMailboxUser as addUserProvider, 
+import {
+  orderWorkspace,
+  setupWorkspaceAdmin as setupAdminProvider,
+  addMailboxUser as addUserProvider,
   getWorkspaceDetails,
-  searchWorkspaceOrders
+  searchWorkspaceOrders,
+  addWorkspaceAccounts,
 } from "../infrastructure/gworkspace-provider";
-import type { 
-  WorkspaceOrderStatus,
-} from "../gworkspace-types";
-import { 
+import type { WorkspaceOrderStatus } from "../gworkspace-types";
+import {
   addDnsRecord,
-  getDomainDetailsByName
+  getDomainDetailsByName,
 } from "@/modules/domains/infrastructure/resellerclub-provider";
 
 /**
@@ -32,7 +31,7 @@ import {
 export async function createWorkspaceOrder(
   domainId: string,
   months: number = 12,
-  numberOfAccounts: number = 1
+  numberOfAccounts: number = 1,
 ) {
   try {
     const session = await auth.api.getSession({
@@ -47,14 +46,17 @@ export async function createWorkspaceOrder(
     });
 
     if (!domainRecord) throw new Error("Domain not found");
-    if (domainRecord.userId !== session.user.id) throw new Error("Unauthorized");
+    if (domainRecord.userId !== session.user.id)
+      throw new Error("Unauthorized");
 
     const userRecord = await db.query.user.findFirst({
       where: eq(userSchema.id, session.user.id),
     });
 
     if (!userRecord || !userRecord.resellerclubCustomerId) {
-      throw new Error("ResellerClub customer account required. Please register a domain first.");
+      throw new Error(
+        "ResellerClub customer account required. Please register a domain first.",
+      );
     }
 
     // 2. Place order via RC Provider
@@ -63,7 +65,7 @@ export async function createWorkspaceOrder(
       domainRecord.name,
       userRecord.resellerclubCustomerId,
       months,
-      numberOfAccounts
+      numberOfAccounts,
     );
 
     if (!orderResult.success || !orderResult.orderId) {
@@ -87,7 +89,9 @@ export async function createWorkspaceOrder(
     });
 
     // 4. Auto-add Google MX Records
-    console.log(`[gworkspace] Auto-configuring MX records for ${domainRecord.name}`);
+    console.log(
+      `[gworkspace] Auto-configuring MX records for ${domainRecord.name}`,
+    );
     const mxRecords = [
       { priority: 1, value: "ASPMX.L.GOOGLE.COM" },
       { priority: 5, value: "ALT1.ASPMX.L.GOOGLE.COM" },
@@ -104,7 +108,7 @@ export async function createWorkspaceOrder(
         "@",
         record.value,
         7200,
-        record.priority
+        record.priority,
       );
     }
 
@@ -112,11 +116,16 @@ export async function createWorkspaceOrder(
     return { success: true, workspaceOrderId };
   } catch (error) {
     console.error("[gworkspace] createWorkspaceOrder error:", error);
-    
+
     // If order already exists or limit reached, try to find and import it
     const errorMessage = error instanceof Error ? error.message : String(error);
-    if (errorMessage.includes("already exists") || errorMessage.includes("Limit reached")) {
-      console.log("[gworkspace] Attempting to import existing order instead...");
+    if (
+      errorMessage.includes("already exists") ||
+      errorMessage.includes("Limit reached")
+    ) {
+      console.log(
+        "[gworkspace] Attempting to import existing order instead...",
+      );
       const importResult = await importWorkspaceOrder(domainId);
       if (importResult.success) return importResult;
     }
@@ -139,49 +148,130 @@ export async function deepImportWorkspace(domainName: string) {
     });
     if (!session?.user?.id) throw new Error("Unauthorized");
 
-    // 1. Ensure domain exists locally
+    // 1. Get user and security check
+    const userRecord = await db.query.user.findFirst({
+      where: eq(userSchema.id, session.user.id),
+    });
+
+    if (!userRecord || !userRecord.resellerclubCustomerId) {
+      throw new Error(
+        "ResellerClub customer account required. Please register a domain first.",
+      );
+    }
+
+    // 2. Search for Workspace Order by domain name first
+    console.log(`[gworkspace] Searching Workspace API for ${domainName}...`);
+    let workspaceSearch = await searchWorkspaceOrders({ domainName });
+
+    // Fallback: If domain search fails, search by Customer ID and filter locally
+    // This is necessary because RC's domain-name filter often fails on complex demo subdomains
+    if (
+      !workspaceSearch.success ||
+      !workspaceSearch.orders ||
+      workspaceSearch.orders.length === 0
+    ) {
+      console.log(
+        `[gworkspace] Domain search failed for ${domainName}. Falling back to Customer ID search...`,
+      );
+      workspaceSearch = await searchWorkspaceOrders({
+        customerId: userRecord.resellerclubCustomerId,
+      });
+    }
+
+    if (
+      !workspaceSearch.success ||
+      !workspaceSearch.orders ||
+      workspaceSearch.orders.length === 0
+    ) {
+      console.warn(
+        `[gworkspace] No workspace orders found for customer ${userRecord.resellerclubCustomerId}`,
+      );
+      throw new Error(
+        `No Google Workspace orders found for this account on ResellerClub.`,
+      );
+    }
+
+    // Filter results locally by domain name (RC search can be fuzzy or return arrays)
+    const rcOrderRaw = (workspaceSearch.orders as any[]).find((o) => {
+      const dName = (
+        o.domainname ||
+        o.domain_name ||
+        o["entity.description"] ||
+        ""
+      ).toLowerCase();
+      const target = domainName.toLowerCase();
+      // Match exactly OR match prefix if RC truncated it (common for long demo domains)
+      return dName === target || (dName.length > 5 && target.startsWith(dName));
+    });
+
+    if (!rcOrderRaw) {
+      console.error(
+        `[gworkspace] Domain ${domainName} not found in customer's ${workspaceSearch.orders.length} orders.`,
+      );
+      console.log(
+        "[gworkspace] Available orders descriptions:",
+        workspaceSearch.orders.map(
+          (o: any) => o["entity.description"] || o.domainname,
+        ),
+      );
+      throw new Error(
+        `Could not find a Google Workspace order for ${domainName} on your ResellerClub account.`,
+      );
+    }
+
+    const rcOrderId =
+      rcOrderRaw.orderid ||
+      rcOrderRaw.entityid ||
+      rcOrderRaw["orders.orderid"] ||
+      rcOrderRaw["entity.entityid"];
+    const rcCustomerId =
+      rcOrderRaw.customerid ||
+      rcOrderRaw.entity_customerid ||
+      rcOrderRaw["entity.customerid"];
+
+    if (!rcOrderId || !rcCustomerId) {
+      console.error(
+        "[gworkspace] Incomplete workspace order data from RC search:",
+        rcOrderRaw,
+      );
+      throw new Error("Could not extract Order ID from search result.");
+    }
+
+    // 3. Ownership Verification
+    if (rcCustomerId.toString() !== userRecord.resellerclubCustomerId) {
+      console.warn(
+        `[gworkspace] Ownership mismatch for ${domainName}. Order Customer: ${rcCustomerId}, Local User RC ID: ${userRecord.resellerclubCustomerId}`,
+      );
+      throw new Error("You do not own this workspace order on ResellerClub.");
+    }
+
+    // 3. Ensure local domain record exists
     let domainRecord = await db.query.domain.findFirst({
       where: eq(domainSchema.name, domainName),
     });
 
     if (!domainRecord) {
-      console.log(`[gworkspace] Domain ${domainName} not found locally. Searching RC...`);
+      console.log(
+        `[gworkspace] Domain ${domainName} not found locally. Searching Domain API...`,
+      );
       const rcDomain = await getDomainDetailsByName(domainName);
-      console.log(`[gworkspace] RC Domain search result for ${domainName}:`, rcDomain);
-      
-      if (!rcDomain.success || !rcDomain.details) {
-        console.error(`[gworkspace] Domain lookup failed for ${domainName}:`, rcDomain.error);
-        throw new Error(rcDomain.error || "Domain not found on ResellerClub");
+
+      let domainOrderId = "0"; // Placeholder if Domain API fails
+
+      if (rcDomain.success && rcDomain.details) {
+        domainOrderId = (rcDomain.details as any).orderid?.toString() || "0";
+      } else {
+        console.warn(
+          `[gworkspace] Domain API failed for discovery (${rcDomain.error}). Using placeholder Order ID.`,
+        );
       }
 
-      const details = rcDomain.details as Record<string, any>;
-      
-      // Check if user owns it on RC (customerid check)
-      const userRecord = await db.query.user.findFirst({
-        where: eq(userSchema.id, session.user.id),
-      });
-      
-      if (!userRecord || !userRecord.resellerclubCustomerId) {
-        throw new Error("ResellerClub customer account required.");
-      }
-
-      const rcCustomerId = details.customerid?.toString();
-      if (rcCustomerId !== userRecord.resellerclubCustomerId) {
-        console.warn(`[gworkspace] Ownership mismatch for ${domainName}. Owner: ${rcCustomerId}, Current: ${userRecord.resellerclubCustomerId}`);
-        throw new Error("You do not own this domain on ResellerClub.");
-      }
-
-      // Import domain locally
       const domainId = crypto.randomUUID();
-      const rcOrderId = details.orderid?.toString();
-      
-      if (!rcOrderId) throw new Error("Missing RC Order ID from domain details");
-
       await db.insert(domainSchema).values({
         id: domainId,
         userId: session.user.id,
         name: domainName,
-        orderId: rcOrderId,
+        orderId: domainOrderId,
         status: "active",
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -192,15 +282,19 @@ export async function deepImportWorkspace(domainName: string) {
       });
     }
 
-    if (!domainRecord) throw new Error("Failed to secure domain record");
+    if (!domainRecord)
+      throw new Error("Failed to secure domain record for import");
 
-    // 2. Import Workspace Order
-    console.log(`[gworkspace] Deep importing workspace for ${domainName}...`);
-    const importRes = await importWorkspaceOrder(domainRecord.id);
-    console.log(`[gworkspace] Deep import result for ${domainName}:`, importRes);
-    return importRes;
+    // 4. Import Workspace Order
+    console.log(
+      `[gworkspace] Proceeding to import workspace order ${rcOrderId} for ${domainName}...`,
+    );
+    return await importWorkspaceOrder(domainRecord.id, rcOrderId.toString());
   } catch (error: unknown) {
-    console.error(`[gworkspace] deepImportWorkspace error for ${domainName}:`, error);
+    console.error(
+      `[gworkspace] deepImportWorkspace error for ${domainName}:`,
+      error,
+    );
     return {
       success: false,
       error: error instanceof Error ? error.message : String(error),
@@ -211,7 +305,10 @@ export async function deepImportWorkspace(domainName: string) {
 /**
  * Import an existing Google Workspace order from ResellerClub
  */
-export async function importWorkspaceOrder(domainId: string) {
+export async function importWorkspaceOrder(
+  domainId: string,
+  providedRcOrderId?: string,
+) {
   try {
     const session = await auth.api.getSession({
       headers: await headers(),
@@ -233,26 +330,73 @@ export async function importWorkspaceOrder(domainId: string) {
       throw new Error("ResellerClub customer required");
     }
 
-    // 1. Search for existing orders for this domain
-    const searchResult = await searchWorkspaceOrders({
-      domainName: domainRecord.name,
-      customerId: userRecord.resellerclubCustomerId,
-    });
+    // 1. Get or Search for RC Order
+    let rcOrder: Record<string, any> | null = null;
+    let rcOrderId = providedRcOrderId;
 
-    if (!searchResult.success || !searchResult.orders || searchResult.orders.length === 0) {
-      throw new Error("No existing order found on ResellerClub to import");
+    if (!rcOrderId) {
+      console.log(`[gworkspace] Searching for order for domainId: ${domainId}`);
+      const searchResult = await searchWorkspaceOrders({
+        domainName: domainRecord.name,
+        customerId: userRecord.resellerclubCustomerId,
+      });
+
+      if (
+        !searchResult.success ||
+        !searchResult.orders ||
+        searchResult.orders.length === 0
+      ) {
+        throw new Error("No existing order found on ResellerClub to import");
+      }
+      rcOrder = searchResult.orders[0] as Record<string, any>;
+      rcOrderId =
+        rcOrder.orderid ||
+        rcOrder.entityid ||
+        rcOrder["orders.orderid"] ||
+        rcOrder["entity.entityid"] ||
+        Object.keys(rcOrder)[0];
     }
 
-    // 2. Take the first (most recent) order found
-    // RC API returns { [id]: { ... } } or [{ ... }]
-    const rcOrder = searchResult.orders[0] as Record<string, any>;
-    const rcOrderId = rcOrder.orderid || Object.keys(rcOrder)[0];
-    
     if (!rcOrderId) throw new Error("Could not determine RC Order ID");
 
-    // Check if we already have it locally
+    // 2. Fetch full details if we don't have rcOrder yet
+    if (!rcOrder) {
+      const detailsRes = await getWorkspaceDetails(rcOrderId.toString());
+      if (!detailsRes.success || !detailsRes.details) {
+        throw new Error(
+          detailsRes.error || "Failed to fetch workspace details during import",
+        );
+      }
+      rcOrder = detailsRes.details as any;
+    }
+
+    // 2. Reconciliation: If a domain already has an order with ID "0", we update it
+    const existingWithZero = await db.query.googleWorkspaceOrder.findFirst({
+      where: and(
+        eq(googleWorkspaceOrder.domainName, domainRecord.name),
+        eq(googleWorkspaceOrder.rcOrderId, "0"),
+      ),
+    });
+
+    if (existingWithZero) {
+      console.log(
+        `[gworkspace] Reconciling existing order ${existingWithZero.id} (ID: 0) to real ID ${rcOrderId}`,
+      );
+      await db
+        .update(googleWorkspaceOrder)
+        .set({
+          rcOrderId: rcOrderId.toString(),
+          updatedAt: new Date(),
+        })
+        .where(eq(googleWorkspaceOrder.id, existingWithZero.id));
+      return { success: true, workspaceOrderId: existingWithZero.id };
+    }
+
     const existingLocal = await db.query.googleWorkspaceOrder.findFirst({
-      where: eq(googleWorkspaceOrder.rcOrderId, rcOrderId.toString()),
+      where: and(
+        eq(googleWorkspaceOrder.userId, session.user.id),
+        eq(googleWorkspaceOrder.rcOrderId, rcOrderId.toString()),
+      ),
     });
 
     if (existingLocal) {
@@ -261,10 +405,26 @@ export async function importWorkspaceOrder(domainId: string) {
 
     // 3. Save to local DB
     const workspaceOrderId = crypto.randomUUID();
-    const status = ((rcOrder.status as string) || "active").toLowerCase();
-    const numberOfAccounts = parseInt((rcOrder.no_of_accounts as string) || "1");
-    const months = parseInt((rcOrder.months as string) || "12");
-    const adminEmail = (rcOrder.admin_email as string) || null;
+
+    // Helper to get nested/dot-notated values
+    const getVal = (paths: string[]) => {
+      for (const p of paths) {
+        if (rcOrder![p] !== undefined) return rcOrder![p];
+      }
+      return null;
+    };
+
+    const status = (
+      getVal(["currentstatus", "entity.currentstatus", "status"]) || "active"
+    )
+      .toString()
+      .toLowerCase();
+    const numberOfAccounts = parseInt(
+      (getVal(["no_of_accounts", "numberOfAccounts"]) || "1").toString(),
+    );
+    const months = parseInt((getVal(["months", "tenure"]) || "12").toString());
+    const adminEmail =
+      getVal(["admin_email", "adminEmail"])?.toString() || null;
 
     await db.insert(googleWorkspaceOrder).values({
       id: workspaceOrderId,
@@ -300,7 +460,7 @@ export async function setupWorkspacePrimaryAdmin(
   emailPrefix: string,
   firstName: string,
   lastName: string,
-  alternateEmail: string
+  alternateEmail: string,
 ) {
   try {
     const session = await auth.api.getSession({
@@ -314,12 +474,61 @@ export async function setupWorkspacePrimaryAdmin(
       where: eq(googleWorkspaceOrder.id, workspaceOrderId),
     });
 
-    if (!order || order.userId !== session.user.id) throw new Error("Workspace order not found");
+    if (!order || order.userId !== session.user.id)
+      throw new Error("Workspace order not found");
 
-    // 2. Call provider to setup admin
+    // 2. Reconciliation: If rcOrderId is "0", try to find the real one
+    let targetRcOrderId = order.rcOrderId;
+    if (targetRcOrderId === "0") {
+      console.log(
+        `[gworkspace] setupWorkspacePrimaryAdmin: rcOrderId is "0" for ${order.domainName}, reconciling...`,
+      );
+      const userRecord = await db.query.user.findFirst({
+        where: eq(userSchema.id, session.user.id),
+      });
+
+      if (userRecord?.resellerclubCustomerId) {
+        const searchResult = await searchWorkspaceOrders({
+          domainName: order.domainName,
+          customerId: userRecord.resellerclubCustomerId,
+        });
+
+        if (
+          searchResult.success &&
+          searchResult.orders &&
+          searchResult.orders.length > 0
+        ) {
+          const rcOrder = searchResult.orders[0] as Record<string, any>;
+          const realId = (
+            rcOrder.orderid ||
+            rcOrder.entityid ||
+            rcOrder["orders.orderid"] ||
+            rcOrder["entity.entityid"]
+          )?.toString();
+
+          if (realId) {
+            console.log(
+              `[gworkspace] setupWorkspacePrimaryAdmin: Found real ID ${realId} for ${order.domainName}`,
+            );
+            targetRcOrderId = realId;
+            // Update the DB so we don't have to do this again
+            await db
+              .update(googleWorkspaceOrder)
+              .set({ rcOrderId: realId, updatedAt: new Date() })
+              .where(eq(googleWorkspaceOrder.id, workspaceOrderId));
+          }
+        }
+      }
+    }
+
+    if (targetRcOrderId === "0") {
+      throw new Error("Could not determine real Order ID for workspace");
+    }
+
+    // 3. Call provider to setup admin
     const setupResult = await setupAdminProvider({
       workspaceOrderId: order.id,
-      rcOrderId: order.rcOrderId,
+      rcOrderId: targetRcOrderId,
       emailPrefix: emailPrefix,
       firstName,
       lastName,
@@ -335,11 +544,12 @@ export async function setupWorkspacePrimaryAdmin(
 
     // 3. Update order in DB
     const adminEmail = `${emailPrefix}@${order.domainName}`;
-    await db.update(googleWorkspaceOrder)
-      .set({ 
-        status: "admin_configured", 
+    await db
+      .update(googleWorkspaceOrder)
+      .set({
+        status: "admin_configured",
         adminEmail,
-        updatedAt: new Date() 
+        updatedAt: new Date(),
       })
       .where(eq(googleWorkspaceOrder.id, workspaceOrderId));
 
@@ -377,7 +587,7 @@ export async function addWorkspaceUserMailbox(
   workspaceOrderId: string,
   username: string,
   firstName: string,
-  lastName: string
+  lastName: string,
 ) {
   try {
     const session = await auth.api.getSession({
@@ -390,7 +600,8 @@ export async function addWorkspaceUserMailbox(
       where: eq(googleWorkspaceOrder.id, workspaceOrderId),
     });
 
-    if (!order || order.userId !== session.user.id) throw new Error("Workspace order not found");
+    if (!order || order.userId !== session.user.id)
+      throw new Error("Workspace order not found");
 
     // 1. Call provider
     const addResult = await addUserProvider({
@@ -449,7 +660,7 @@ export async function getUserWorkspaceOrders() {
       orderBy: [desc(googleWorkspaceOrder.createdAt)],
       with: {
         mailboxes: true,
-      }
+      },
     });
 
     return { success: true, orders };
@@ -472,16 +683,20 @@ export async function syncWorkspaceOrderDetails(workspaceOrderId: string) {
 
     const detailsResult = await getWorkspaceDetails(order.rcOrderId);
     if (!detailsResult.success || !detailsResult.details) {
-      throw new Error(detailsResult.error || "Failed to sync from ResellerClub");
+      throw new Error(
+        detailsResult.error || "Failed to sync from ResellerClub",
+      );
     }
 
-    const rcStatus = detailsResult.details.status.toLowerCase() as WorkspaceOrderStatus;
-    
+    const rcStatus =
+      detailsResult.details.status.toLowerCase() as WorkspaceOrderStatus;
+
     // Update local status if changed
-    await db.update(googleWorkspaceOrder)
-      .set({ 
+    await db
+      .update(googleWorkspaceOrder)
+      .set({
         status: rcStatus,
-        updatedAt: new Date() 
+        updatedAt: new Date(),
       })
       .where(eq(googleWorkspaceOrder.id, workspaceOrderId));
 
@@ -510,22 +725,22 @@ export async function getMailboxCredentials(mailboxId: string) {
         order: {
           columns: {
             userId: true,
-          }
-        }
-      }
+          },
+        },
+      },
     });
 
     if (!mailbox || (mailbox as any).order.userId !== session.user.id) {
       throw new Error("Mailbox not found");
     }
 
-    return { 
-      success: true, 
+    return {
+      success: true,
       credentials: {
         email: mailbox.email,
         password: mailbox.password || "N/A",
-        updatedAt: mailbox.passwordUpdatedAt
-      } 
+        updatedAt: mailbox.passwordUpdatedAt,
+      },
     };
   } catch (error) {
     console.error("[gworkspace] getMailboxCredentials error:", error);
@@ -548,23 +763,120 @@ export async function getAllOrderCredentials(workspaceOrderId: string) {
       where: eq(googleWorkspaceOrder.id, workspaceOrderId),
       with: {
         mailboxes: true,
-      }
+      },
     });
 
     if (!order || order.userId !== session.user.id) {
       throw new Error("Order not found");
     }
 
-    const credentials = order.mailboxes.map(m => ({
+    const credentials = order.mailboxes.map((m) => ({
       email: m.email,
       username: m.username,
       password: m.password || "N/A",
-      role: m.role
+      role: m.role,
     }));
 
     return { success: true, credentials };
   } catch (error) {
     console.error("[gworkspace] getAllOrderCredentials error:", error);
     return { success: false, error: "Failed to fetch all credentials" };
+  }
+}
+/**
+ * Add more licenses (seats) to an existing workspace order
+ */
+export async function addWorkspaceLicensesAction(
+  workspaceOrderId: string,
+  noOfAccounts: number,
+) {
+  try {
+    const session = await auth.api.getSession({
+      headers: await headers(),
+    });
+
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    // 1. Get workspace order
+    const order = await db.query.googleWorkspaceOrder.findFirst({
+      where: eq(googleWorkspaceOrder.id, workspaceOrderId),
+    });
+
+    if (!order || order.userId !== session.user.id) {
+      throw new Error("Workspace order not found");
+    }
+
+    // 2. Reconciliation: If rcOrderId is "0", try to find the real one
+    let targetRcOrderId = order.rcOrderId;
+    if (targetRcOrderId === "0") {
+      console.log(
+        `[gworkspace] addWorkspaceLicensesAction: rcOrderId is "0" for ${order.domainName}, reconciling...`,
+      );
+      const userRecord = await db.query.user.findFirst({
+        where: eq(userSchema.id, session.user.id),
+      });
+
+      if (userRecord?.resellerclubCustomerId) {
+        const searchResult = await searchWorkspaceOrders({
+          domainName: order.domainName,
+          customerId: userRecord.resellerclubCustomerId,
+        });
+
+        if (
+          searchResult.success &&
+          searchResult.orders &&
+          searchResult.orders.length > 0
+        ) {
+          const rcOrder = searchResult.orders[0] as Record<string, any>;
+          const realId = (
+            rcOrder.orderid ||
+            rcOrder.entityid ||
+            rcOrder["orders.orderid"] ||
+            rcOrder["entity.entityid"]
+          )?.toString();
+
+          if (realId) {
+            console.log(
+              `[gworkspace] addWorkspaceLicensesAction: Found real ID ${realId} for ${order.domainName}`,
+            );
+            targetRcOrderId = realId;
+            // Update the DB so we don't have to do this again
+            await db
+              .update(googleWorkspaceOrder)
+              .set({ rcOrderId: realId, updatedAt: new Date() })
+              .where(eq(googleWorkspaceOrder.id, workspaceOrderId));
+          }
+        }
+      }
+    }
+
+    if (targetRcOrderId === "0") {
+      throw new Error("Could not determine real Order ID for workspace");
+    }
+
+    // 3. Call provider to add licenses
+    const result = await addWorkspaceAccounts(targetRcOrderId, noOfAccounts);
+
+    if (!result.success) {
+      throw new Error(result.error || "Failed to add licenses");
+    }
+
+    // 3. Update DB locally
+    await db
+      .update(googleWorkspaceOrder)
+      .set({
+        numberOfAccounts: order.numberOfAccounts + noOfAccounts,
+        updatedAt: new Date(),
+      })
+      .where(eq(googleWorkspaceOrder.id, workspaceOrderId));
+
+    revalidatePath("/mailboxes/google");
+    return { success: true };
+  } catch (error) {
+    console.error("[gworkspace] addWorkspaceLicensesAction error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
   }
 }

@@ -339,10 +339,20 @@ export async function searchWorkspaceOrders(
     }
 
     const result = await response.json();
+    console.log(`[gworkspace] searchWorkspaceOrders for ${params.domainName || params.customerId} raw result:`, JSON.stringify(result).slice(0, 500));
 
     if (response.ok) {
-      // The search API usually returns an object with results keys or an array
-      return { success: true, orders: result.results || (Array.isArray(result) ? result : []) };
+      // RC Search API returns { "1": {..}, "2": {..}, "recno": X } or an array
+      let orders: any[] = [];
+      if (Array.isArray(result)) {
+        orders = result;
+      } else if (typeof result === "object" && result !== null) {
+        // Extract numeric keys
+        orders = Object.keys(result)
+          .filter(k => !Number.isNaN(Number(k)))
+          .map(k => (result as Record<string, any>)[k]);
+      }
+      return { success: true, orders };
     } else {
       return {
         success: false,
@@ -351,6 +361,67 @@ export async function searchWorkspaceOrders(
     }
   } catch (error) {
     console.error("[gworkspace] Search error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+/**
+ * Add more accounts (licenses/seats) to an existing Workspace order
+ */
+export async function addWorkspaceAccounts(
+  rcOrderId: string,
+  noOfAccounts: number
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    let response: Response;
+
+    if (config.proxyUrl && config.proxyToken) {
+      const url = `${config.proxyUrl}/googleapps/add-account`;
+      response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${config.proxyToken}`,
+        },
+        body: JSON.stringify({
+          orderId: rcOrderId,
+          noOfAccounts,
+        }),
+      });
+    } else {
+      if (!config.authUserId || !config.apiKey) {
+        return { success: false, error: "Missing ResellerClub config" };
+      }
+
+      const params = new URLSearchParams({
+        "auth-userid": config.authUserId,
+        "api-key": config.apiKey,
+        "order-id": rcOrderId,
+        "no-of-accounts": noOfAccounts.toString(),
+        "invoice-option": "NoInvoice",
+      });
+
+      const url = `${BASE_URL}/googleapps/add-account.json?${params.toString()}`;
+      response = await fetch(url, {
+        method: "POST",
+        headers: COMMON_HEADERS,
+      });
+    }
+
+    const result = await response.json();
+
+    if (response.ok && (result.status === "Success" || result.actionid)) {
+      return { success: true };
+    } else {
+      return {
+        success: false,
+        error: result.message || result.error || "Failed to add accounts",
+      };
+    }
+  } catch (error) {
+    console.error("[gworkspace] Add accounts error:", error);
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",

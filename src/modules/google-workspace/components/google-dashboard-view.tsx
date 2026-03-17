@@ -220,6 +220,7 @@ export function GoogleDashboardView({
                 key={order.id} 
                 order={order} 
                 onConfigureAdmin={(order) => setResumingOrder(order)}
+                onAddMailbox={(order) => setResumingOrder(order)}
               />
             ))}
           </div>

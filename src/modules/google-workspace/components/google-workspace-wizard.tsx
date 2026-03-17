@@ -70,7 +70,11 @@ export function GoogleWorkspaceWizard({
   domains: UserDomain[];
   initialOrder?: GoogleWorkspaceOrder & { mailboxes: GoogleWorkspaceMailbox[] };
 }) {
-  const [step, setStep] = useState<WizardStep>(initialOrder ? "admin" : "domain");
+  const [step, setStep] = useState<WizardStep>(
+    initialOrder 
+      ? (initialOrder.adminEmail ? "users" : "admin") 
+      : "domain"
+  );
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedDomain, setSelectedDomain] = useState<UserDomain | null>(
     initialOrder ? { id: initialOrder.domainId, name: initialOrder.domainName, status: "active" } : null

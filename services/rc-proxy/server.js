@@ -1023,6 +1023,7 @@ app.post("/googleapps/admin/add", requireAuth, async (req, res) => {
   const params = new URLSearchParams();
   params.append("auth-userid", RESELLERCLUB_AUTH_USER_ID);
   params.append("api-key", RESELLERCLUB_API_KEY);
+  console.log(`[proxy] /googleapps/admin/add: orderId=${orderId}, email=${emailAddress}`);
   params.append("order-id", String(orderId));
   params.append("email-address", emailAddress);
   params.append("first-name", firstName);
@@ -1136,6 +1137,7 @@ app.post("/googleapps/add-account", requireAuth, async (req, res) => {
   const params = new URLSearchParams();
   params.append("auth-userid", RESELLERCLUB_AUTH_USER_ID);
   params.append("api-key", RESELLERCLUB_API_KEY);
+  console.log(`[proxy] /googleapps/add-account: orderId=${orderId}, count=${noOfAccounts}`);
   params.append("order-id", String(orderId));
   params.append("no-of-accounts", String(noOfAccounts));
   params.append("invoice-option", invoiceOption || "NoInvoice");
