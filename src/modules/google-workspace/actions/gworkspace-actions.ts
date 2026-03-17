@@ -147,8 +147,10 @@ export async function deepImportWorkspace(domainName: string) {
     if (!domainRecord) {
       console.log(`[gworkspace] Domain ${domainName} not found locally. Searching RC...`);
       const rcDomain = await getDomainDetailsByName(domainName);
+      console.log(`[gworkspace] RC Domain search result for ${domainName}:`, rcDomain);
       
       if (!rcDomain.success || !rcDomain.details) {
+        console.error(`[gworkspace] Domain lookup failed for ${domainName}:`, rcDomain.error);
         throw new Error(rcDomain.error || "Domain not found on ResellerClub");
       }
 
@@ -165,6 +167,7 @@ export async function deepImportWorkspace(domainName: string) {
 
       const rcCustomerId = details.customerid?.toString();
       if (rcCustomerId !== userRecord.resellerclubCustomerId) {
+        console.warn(`[gworkspace] Ownership mismatch for ${domainName}. Owner: ${rcCustomerId}, Current: ${userRecord.resellerclubCustomerId}`);
         throw new Error("You do not own this domain on ResellerClub.");
       }
 
@@ -192,10 +195,12 @@ export async function deepImportWorkspace(domainName: string) {
     if (!domainRecord) throw new Error("Failed to secure domain record");
 
     // 2. Import Workspace Order
-    console.log(`[gworkspace] Importing workspace for ${domainName}...`);
-    return await importWorkspaceOrder(domainRecord.id);
-  } catch (error) {
-    console.error("[gworkspace] deepImportWorkspace error:", error);
+    console.log(`[gworkspace] Deep importing workspace for ${domainName}...`);
+    const importRes = await importWorkspaceOrder(domainRecord.id);
+    console.log(`[gworkspace] Deep import result for ${domainName}:`, importRes);
+    return importRes;
+  } catch (error: unknown) {
+    console.error(`[gworkspace] deepImportWorkspace error for ${domainName}:`, error);
     return {
       success: false,
       error: error instanceof Error ? error.message : String(error),

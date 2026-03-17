@@ -490,7 +490,7 @@ app.get("/domains/details-by-name", requireAuth, async (req, res) => {
   params.append("domain-name", String(actualDomainName));
   params.append("options", "All"); // Get all details
 
-  const url = `${BASE_URL}/domains/details-by-name.json?${params.toString()}`;
+  const url = `${RC_BASE_URL}/domains/details-by-name.json?${params.toString()}`;
   logOutgoingRequest(url, "GET");
 
   try {
@@ -533,7 +533,7 @@ app.get("/domains/details", requireAuth, async (req, res) => {
   params.append("order-id", String(actualOrderId));
   params.append("options", "All");
 
-  const url = `${BASE_URL}/domains/details.json?${params.toString()}`;
+  const url = `${RC_BASE_URL}/domains/details.json?${params.toString()}`;
   logOutgoingRequest(url, "GET");
 
   try {

@@ -647,11 +647,21 @@ export async function getDomainDetailsByName(
       });
     }
 
-    const result = await response.json();
+    const responseText = await response.text();
+    console.log(`[domains] getDomainDetailsByName raw response for ${domainName}:`, responseText);
+
+    let result: any;
+    try {
+      result = JSON.parse(responseText);
+    } catch (e) {
+      console.error(`[domains] Failed to parse JSON for ${domainName}:`, e);
+      return { success: false, error: `Invalid response from API: ${responseText.slice(0, 100)}` };
+    }
 
     if (response.ok && result.orderid) {
       return { success: true, details: result };
     } else {
+      console.warn(`[domains] Domain details failed for ${domainName}:`, result);
       return {
         success: false,
         error: result.message || result.error || "Domain not found",
