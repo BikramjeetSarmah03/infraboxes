@@ -34,12 +34,11 @@ import {
   setupWorkspacePrimaryAdmin,
   addWorkspaceUserMailbox,
 } from "../actions/gworkspace-actions";
-import type { 
-  GoogleWorkspaceOrder, 
-  GoogleWorkspaceMailbox 
+import type {
+  GoogleWorkspaceOrder,
+  GoogleWorkspaceMailbox,
 } from "../gworkspace-types";
 import { getUserProfileForBilling } from "@/modules/domains/actions/domain-actions";
-import { eq } from "drizzle-orm";
 import { faker } from "@faker-js/faker";
 
 type WizardStep =
@@ -63,25 +62,35 @@ interface NewMailbox {
   lastName: string;
 }
 
-export function GoogleWorkspaceWizard({ 
+export function GoogleWorkspaceWizard({
   domains,
-  initialOrder 
-}: { 
+  initialOrder,
+}: {
   domains: UserDomain[];
   initialOrder?: GoogleWorkspaceOrder & { mailboxes: GoogleWorkspaceMailbox[] };
 }) {
   const [step, setStep] = useState<WizardStep>(
-    initialOrder 
-      ? (initialOrder.adminEmail ? "users" : "admin") 
-      : "domain"
+    initialOrder ? (initialOrder.adminEmail ? "users" : "admin") : "domain",
   );
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedDomain, setSelectedDomain] = useState<UserDomain | null>(
-    initialOrder ? { id: initialOrder.domainId, name: initialOrder.domainName, status: "active" } : null
+    initialOrder
+      ? {
+          id: initialOrder.domainId,
+          name: initialOrder.domainName,
+          status: "active",
+        }
+      : null,
   );
-  const [months, setMonths] = useState(initialOrder?.months?.toString() || "12");
-  const [noOfAccounts, setNoOfAccounts] = useState(initialOrder?.numberOfAccounts || 3);
-  const [existingWorkspaceOrderId] = useState<string | null>(initialOrder?.id || null);
+  const [months, setMonths] = useState(
+    initialOrder?.months?.toString() || "12",
+  );
+  const [noOfAccounts, setNoOfAccounts] = useState(
+    initialOrder?.numberOfAccounts || 3,
+  );
+  const [existingWorkspaceOrderId] = useState<string | null>(
+    initialOrder?.id || null,
+  );
 
   // Admin Info
   const [adminInfo, setAdminInfo] = useState({
@@ -158,7 +167,7 @@ export function GoogleWorkspaceWizard({
 
     // 1. Order Creation (Skip if we already have a workspaceOrderId)
     let workspaceOrderId: string | null = existingWorkspaceOrderId;
-    
+
     if (!workspaceOrderId) {
       setProgress((p) => ({ ...p, order: "loading" }));
       const orderRes = await createWorkspaceOrder(
@@ -169,7 +178,11 @@ export function GoogleWorkspaceWizard({
 
       if (!orderRes.success) {
         setProgress((p) => ({ ...p, order: "error" }));
-        setErrorStatus("error" in orderRes ? (orderRes as any).error : "Order placement failed");
+        setErrorStatus(
+          "error" in orderRes
+            ? (orderRes as any).error
+            : "Order placement failed",
+        );
         setIsProcessing(false);
         return;
       }
@@ -183,8 +196,8 @@ export function GoogleWorkspaceWizard({
       }
       setProgress((p) => ({ ...p, order: "done" }));
     } else {
-       // If resuming, mark order as done
-       setProgress((p) => ({ ...p, order: "done" }));
+      // If resuming, mark order as done
+      setProgress((p) => ({ ...p, order: "done" }));
     }
 
     // 2. Admin Setup
@@ -264,10 +277,11 @@ export function GoogleWorkspaceWizard({
       newUsers.push({
         firstName,
         lastName,
-        username: `${firstName.toLowerCase()}.${lastName.toLowerCase()}`.replace(
-          /[^a-z.]/g,
-          "",
-        ),
+        username:
+          `${firstName.toLowerCase()}.${lastName.toLowerCase()}`.replace(
+            /[^a-z.]/g,
+            "",
+          ),
       });
     }
 
@@ -413,7 +427,9 @@ export function GoogleWorkspaceWizard({
                 onClick={() => setStep("plan")}
                 className="h-14 px-12 bg-zinc-900 dark:bg-zinc-50 text-white dark:text-zinc-900 font-black uppercase text-xs tracking-[0.2em] rounded-2xl shadow-2xl hover:scale-105 transition-transform"
               >
-                {isProcessing ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
+                {isProcessing ? (
+                  <Loader2 className="size-4 animate-spin mr-2" />
+                ) : null}
                 Proceed to Plan
                 <ChevronRight className="size-4 ml-2" />
               </Button>

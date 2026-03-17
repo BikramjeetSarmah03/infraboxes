@@ -9,7 +9,7 @@ const PROXY_TOKEN = process.env.PROXY_TOKEN;
 // API base URLs (production only)
 // API base URLs
 const IS_TEST = process.env.RESELLERCLUB_IS_TEST === "true";
-const RC_BASE_URL = IS_TEST 
+const RC_BASE_URL = IS_TEST
   ? "https://test.httpapi.com/api"
   : "https://httpapi.com/api";
 const RC_DOMAINCHECK_URL = IS_TEST
@@ -501,7 +501,12 @@ app.get("/domains/details-by-name", requireAuth, async (req, res) => {
     const body = await response.text();
     const contentType = response.headers.get("content-type");
 
-    logUpstreamDiagnostics("/domains/details-by-name", response.status, contentType, body);
+    logUpstreamDiagnostics(
+      "/domains/details-by-name",
+      response.status,
+      contentType,
+      body,
+    );
 
     if (contentType) res.set("content-type", contentType);
     res.status(response.status).send(body);
@@ -544,7 +549,12 @@ app.get("/domains/details", requireAuth, async (req, res) => {
     const body = await response.text();
     const contentType = response.headers.get("content-type");
 
-    logUpstreamDiagnostics("/domains/details", response.status, contentType, body);
+    logUpstreamDiagnostics(
+      "/domains/details",
+      response.status,
+      contentType,
+      body,
+    );
 
     if (contentType) res.set("content-type", contentType);
     res.status(response.status).send(body);
@@ -553,7 +563,6 @@ app.get("/domains/details", requireAuth, async (req, res) => {
     res.status(502).json({ error: "Failed to reach ResellerClub" });
   }
 });
-
 
 // ============================================
 // Domain Registration Endpoints
@@ -809,7 +818,6 @@ app.get("/dns/records", requireAuth, async (req, res) => {
 // Contact Endpoints
 // ============================================
 
-
 // ============================================
 // Domain Registration Endpoints
 // ============================================
@@ -1023,8 +1031,15 @@ app.post("/googleapps/admin/add", requireAuth, async (req, res) => {
   const params = new URLSearchParams();
   params.append("auth-userid", RESELLERCLUB_AUTH_USER_ID);
   params.append("api-key", RESELLERCLUB_API_KEY);
-  console.log(`[proxy] /googleapps/admin/add: orderId=${orderId}, email=${emailAddress}`);
-  params.append("order-id", String(orderId));
+  const actualOrderId =
+    orderId ||
+    req.body["order-id"] ||
+    req.body["entity-id"] ||
+    req.body["entityId"];
+  console.log(
+    `[proxy] /googleapps/admin/add: inputOrderId=${orderId}, resolved=${actualOrderId}, email=${emailAddress}`,
+  );
+  params.append("order-id", String(actualOrderId || 0));
   params.append("email-address", emailAddress);
   params.append("first-name", firstName);
   params.append("last-name", lastName);
@@ -1127,7 +1142,9 @@ app.post("/googleapps/add-account", requireAuth, async (req, res) => {
   const { orderId, noOfAccounts, invoiceOption } = req.body ?? {};
 
   if (!orderId || !noOfAccounts) {
-    return res.status(400).json({ error: "orderId and noOfAccounts are required" });
+    return res
+      .status(400)
+      .json({ error: "orderId and noOfAccounts are required" });
   }
 
   if (!RESELLERCLUB_AUTH_USER_ID || !RESELLERCLUB_API_KEY) {
@@ -1137,8 +1154,16 @@ app.post("/googleapps/add-account", requireAuth, async (req, res) => {
   const params = new URLSearchParams();
   params.append("auth-userid", RESELLERCLUB_AUTH_USER_ID);
   params.append("api-key", RESELLERCLUB_API_KEY);
-  console.log(`[proxy] /googleapps/add-account: orderId=${orderId}, count=${noOfAccounts}`);
-  params.append("order-id", String(orderId));
+  const actualOrderId =
+    orderId ||
+    req.body["order-id"] ||
+    req.body["entity-id"] ||
+    req.body["entityId"];
+  console.log({ actualOrderId });
+  console.log(
+    `[proxy] /googleapps/add-account: inputOrderId=${orderId}, resolved=${actualOrderId}, count=${noOfAccounts}`,
+  );
+  params.append("order-id", String(actualOrderId || 0));
   params.append("no-of-accounts", String(noOfAccounts));
   params.append("invoice-option", invoiceOption || "NoInvoice");
 
@@ -1179,7 +1204,9 @@ app.post("/dns/activate", requireAuth, async (req, res) => {
   const actualOrderId = order_id || orderId || orderIdDash;
 
   if (!actualOrderId) {
-    return res.status(400).json({ error: "order_id, orderId, or order-id is required" });
+    return res
+      .status(400)
+      .json({ error: "order_id, orderId, or order-id is required" });
   }
 
   if (!RESELLERCLUB_AUTH_USER_ID || !RESELLERCLUB_API_KEY) {
@@ -1238,14 +1265,20 @@ app.post("/dns/manage/add-record", requireAuth, async (req, res) => {
 
   const actualOrderId = orderIdDash || order_id || orderId;
   const actualDomainName = domainNameDash || domain_name || domainName;
-  const rawRecordType = (recordTypeDash || record_type || type || "").toUpperCase();
+  const rawRecordType = (
+    recordTypeDash ||
+    record_type ||
+    type ||
+    ""
+  ).toUpperCase();
 
   // Mapping for ResellerClub specific endpoint naming
   const typeMap = {
     A: "ipv4",
     AAAA: "ipv6",
   };
-  const actualRecordType = typeMap[rawRecordType] || rawRecordType.toLowerCase();
+  const actualRecordType =
+    typeMap[rawRecordType] || rawRecordType.toLowerCase();
 
   if (
     !actualOrderId ||
@@ -1311,7 +1344,10 @@ app.post("/dns/manage/add-record", requireAuth, async (req, res) => {
       contentType,
       body,
     );
-    console.log(`[proxy] ResellerClub add-record response for ${actualDomainName}:`, body);
+    console.log(
+      `[proxy] ResellerClub add-record response for ${actualDomainName}:`,
+      body,
+    );
 
     if (contentType) {
       res.set("content-type", contentType);
@@ -1428,7 +1464,9 @@ app.get("/dns/manage/search-records", requireAuth, async (req, res) => {
     // Fallback to Impressly DNS endpoint if no records found
     // This is often used for domains using "Free DNS" or "Impressly DNS"
     if (allRecords.length === 0 && order_id) {
-      console.log(`[proxy] No standard records found for ${domain_name}, checking Impressly endpoint...`);
+      console.log(
+        `[proxy] No standard records found for ${domain_name}, checking Impressly endpoint...`,
+      );
       const impParams = new URLSearchParams();
       impParams.append("auth-userid", RESELLERCLUB_AUTH_USER_ID);
       impParams.append("api-key", RESELLERCLUB_API_KEY);
@@ -1445,7 +1483,10 @@ app.get("/dns/manage/search-records", requireAuth, async (req, res) => {
 
         if (impResponse.ok) {
           const impBody = await impResponse.json();
-          console.log(`[proxy] Impressly response for ${order_id}:`, JSON.stringify(impBody).slice(0, 500));
+          console.log(
+            `[proxy] Impressly response for ${order_id}:`,
+            JSON.stringify(impBody).slice(0, 500),
+          );
           const items = impBody.records || impBody;
           if (Array.isArray(items)) {
             allRecords.push(...items);

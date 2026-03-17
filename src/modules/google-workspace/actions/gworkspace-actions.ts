@@ -477,11 +477,13 @@ export async function setupWorkspacePrimaryAdmin(
     if (!order || order.userId !== session.user.id)
       throw new Error("Workspace order not found");
 
-    // 2. Reconciliation: If rcOrderId is "0", try to find the real one
+    // 2. Reconciliation: If rcOrderId is "0" or invalid, try to find the real one
     let targetRcOrderId = order.rcOrderId;
-    if (targetRcOrderId === "0") {
+    const isInvalidId = !targetRcOrderId || targetRcOrderId === "0" || targetRcOrderId === 0 || targetRcOrderId === "undefined";
+    
+    if (isInvalidId) {
       console.log(
-        `[gworkspace] setupWorkspacePrimaryAdmin: rcOrderId is "0" for ${order.domainName}, reconciling...`,
+        `[gworkspace] setupWorkspacePrimaryAdmin: rcOrderId is "${targetRcOrderId}" for ${order.domainName}, reconciling...`,
       );
       const userRecord = await db.query.user.findFirst({
         where: eq(userSchema.id, session.user.id),
@@ -521,9 +523,11 @@ export async function setupWorkspacePrimaryAdmin(
       }
     }
 
-    if (targetRcOrderId === "0") {
-      throw new Error("Could not determine real Order ID for workspace");
+    if (!targetRcOrderId || targetRcOrderId === "0" || targetRcOrderId === "undefined") {
+      throw new Error(`Could not determine real Order ID for workspace (current: ${targetRcOrderId})`);
     }
+
+    console.log(`[gworkspace] setupWorkspacePrimaryAdmin: Calling provider with rcOrderId=${targetRcOrderId}`);
 
     // 3. Call provider to setup admin
     const setupResult = await setupAdminProvider({
@@ -539,6 +543,7 @@ export async function setupWorkspacePrimaryAdmin(
     });
 
     if (!setupResult.success) {
+      console.log({ setupResult });
       throw new Error(setupResult.error || "Failed to setup admin account");
     }
 
@@ -572,6 +577,7 @@ export async function setupWorkspacePrimaryAdmin(
     revalidatePath("/mailboxes/google");
     return { success: true };
   } catch (error) {
+    console.log({ error });
     console.error("[gworkspace] setupWorkspacePrimaryAdmin error:", error);
     return {
       success: false,
@@ -806,11 +812,13 @@ export async function addWorkspaceLicensesAction(
       throw new Error("Workspace order not found");
     }
 
-    // 2. Reconciliation: If rcOrderId is "0", try to find the real one
+    // 2. Reconciliation: If rcOrderId is "0" or invalid, try to find the real one
     let targetRcOrderId = order.rcOrderId;
-    if (targetRcOrderId === "0") {
+    const isInvalidId = !targetRcOrderId || targetRcOrderId === "0" || targetRcOrderId === 0 || targetRcOrderId === "undefined";
+    
+    if (isInvalidId) {
       console.log(
-        `[gworkspace] addWorkspaceLicensesAction: rcOrderId is "0" for ${order.domainName}, reconciling...`,
+        `[gworkspace] addWorkspaceLicensesAction: rcOrderId is "${targetRcOrderId}" for ${order.domainName}, reconciling...`,
       );
       const userRecord = await db.query.user.findFirst({
         where: eq(userSchema.id, session.user.id),
@@ -850,9 +858,11 @@ export async function addWorkspaceLicensesAction(
       }
     }
 
-    if (targetRcOrderId === "0") {
-      throw new Error("Could not determine real Order ID for workspace");
+    if (!targetRcOrderId || targetRcOrderId === "0" || targetRcOrderId === "undefined") {
+      throw new Error(`Could not determine real Order ID for workspace (current: ${targetRcOrderId})`);
     }
+
+    console.log(`[gworkspace] addWorkspaceLicensesAction: Calling provider with rcOrderId=${targetRcOrderId}`);
 
     // 3. Call provider to add licenses
     const result = await addWorkspaceAccounts(targetRcOrderId, noOfAccounts);
