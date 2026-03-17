@@ -18,16 +18,21 @@ import {
   ChevronUp,
   RefreshCcw,
   Settings,
+  Download,
 } from "lucide-react";
 import { format } from "date-fns";
-import { syncWorkspaceOrderDetails } from "../actions/gworkspace-actions";
+import { 
+  syncWorkspaceOrderDetails, 
+  getAllOrderCredentials 
+} from "../actions/gworkspace-actions";
 import { toast } from "sonner";
 
 interface WorkspaceOrderCardProps {
   order: GoogleWorkspaceOrder & { mailboxes: GoogleWorkspaceMailbox[] };
+  onConfigureAdmin?: (order: GoogleWorkspaceOrder & { mailboxes: GoogleWorkspaceMailbox[] }) => void;
 }
 
-export function WorkspaceOrderCard({ order }: WorkspaceOrderCardProps) {
+export function WorkspaceOrderCard({ order, onConfigureAdmin }: WorkspaceOrderCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -43,6 +48,30 @@ export function WorkspaceOrderCard({ order }: WorkspaceOrderCardProps) {
     } finally {
       setIsSyncing(false);
     }
+  };
+
+  const handleExport = async () => {
+    const result = await getAllOrderCredentials(order.id);
+    if (!result.success || !result.credentials) {
+      toast.error(result.error || "Failed to fetch credentials for export");
+      return;
+    }
+
+    const content = result.credentials
+      .map(c => `Email: ${c.email}\nPassword: ${c.password}\nRole: ${c.role}\n-------------------`)
+      .join("\n\n");
+    
+    const blob = new Blob([`Google Workspace Credentials - ${order.domainName}\n\n${content}`], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `credentials-${order.domainName}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    toast.success("Credentials exported successfully");
   };
 
   const statusColors: Record<string, string> = {
@@ -100,6 +129,16 @@ export function WorkspaceOrderCard({ order }: WorkspaceOrderCardProps) {
             <Button
               variant="outline"
               size="icon"
+              className="size-10 rounded-xl border-zinc-200 dark:border-zinc-800 text-zinc-400 hover:text-emerald-500 transition-colors"
+              onClick={handleExport}
+              title="Export All Credentials"
+            >
+              <Download className="size-4" />
+            </Button>
+
+            <Button
+              variant="outline"
+              size="icon"
               className="size-10 rounded-xl border-zinc-200 dark:border-zinc-800 text-zinc-400 hover:text-blue-500 transition-colors"
               onClick={handleSync}
               disabled={isSyncing}
@@ -122,6 +161,15 @@ export function WorkspaceOrderCard({ order }: WorkspaceOrderCardProps) {
                 <ChevronDown className="size-4" />
               )}
             </Button>
+
+            {!order.adminEmail && onConfigureAdmin && (
+              <Button
+                className="h-10 px-6 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-black text-xs uppercase tracking-widest shadow-lg shadow-orange-500/20 animate-pulse"
+                onClick={() => onConfigureAdmin(order)}
+              >
+                Configure Business
+              </Button>
+            )}
           </div>
         </div>
 

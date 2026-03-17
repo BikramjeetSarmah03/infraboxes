@@ -34,6 +34,10 @@ import {
   setupWorkspacePrimaryAdmin,
   addWorkspaceUserMailbox,
 } from "../actions/gworkspace-actions";
+import type { 
+  GoogleWorkspaceOrder, 
+  GoogleWorkspaceMailbox 
+} from "../gworkspace-types";
 import { getUserProfileForBilling } from "@/modules/domains/actions/domain-actions";
 import { eq } from "drizzle-orm";
 import { faker } from "@faker-js/faker";
@@ -59,12 +63,21 @@ interface NewMailbox {
   lastName: string;
 }
 
-export function GoogleWorkspaceWizard({ domains }: { domains: UserDomain[] }) {
-  const [step, setStep] = useState<WizardStep>("domain");
+export function GoogleWorkspaceWizard({ 
+  domains,
+  initialOrder 
+}: { 
+  domains: UserDomain[];
+  initialOrder?: GoogleWorkspaceOrder & { mailboxes: GoogleWorkspaceMailbox[] };
+}) {
+  const [step, setStep] = useState<WizardStep>(initialOrder ? "admin" : "domain");
   const [isProcessing, setIsProcessing] = useState(false);
-  const [selectedDomain, setSelectedDomain] = useState<UserDomain | null>(null);
-  const [months, setMonths] = useState("12");
-  const [noOfAccounts, setNoOfAccounts] = useState(3);
+  const [selectedDomain, setSelectedDomain] = useState<UserDomain | null>(
+    initialOrder ? { id: initialOrder.domainId, name: initialOrder.domainName, status: "active" } : null
+  );
+  const [months, setMonths] = useState(initialOrder?.months?.toString() || "12");
+  const [noOfAccounts, setNoOfAccounts] = useState(initialOrder?.numberOfAccounts || 3);
+  const [existingWorkspaceOrderId] = useState<string | null>(initialOrder?.id || null);
 
   // Admin Info
   const [adminInfo, setAdminInfo] = useState({
@@ -139,27 +152,41 @@ export function GoogleWorkspaceWizard({ domains }: { domains: UserDomain[] }) {
     setIsProcessing(true);
     setErrorStatus(null);
 
-    // 1. Order Creation
-    setProgress((p) => ({ ...p, order: "loading" }));
-    const orderRes = await createWorkspaceOrder(
-      selectedDomain!.id,
-      parseInt(months),
-      noOfAccounts,
-    );
+    // 1. Order Creation (Skip if we already have a workspaceOrderId)
+    let workspaceOrderId: string | null = existingWorkspaceOrderId;
+    
+    if (!workspaceOrderId) {
+      setProgress((p) => ({ ...p, order: "loading" }));
+      const orderRes = await createWorkspaceOrder(
+        selectedDomain!.id,
+        parseInt(months),
+        noOfAccounts,
+      );
 
-    if (!orderRes.success || !orderRes.workspaceOrderId) {
-      setProgress((p) => ({ ...p, order: "error" }));
-      setErrorStatus(orderRes.error || "Order placement failed");
-      setIsProcessing(false);
-      return;
+      if (!orderRes.success) {
+        setProgress((p) => ({ ...p, order: "error" }));
+        setErrorStatus("error" in orderRes ? (orderRes as any).error : "Order placement failed");
+        setIsProcessing(false);
+        return;
+      }
+      const res = orderRes as { success: true; workspaceOrderId: string };
+      workspaceOrderId = res.workspaceOrderId;
+      if (!workspaceOrderId) {
+        setProgress((p) => ({ ...p, order: "error" }));
+        setErrorStatus("Could not determine order ID");
+        setIsProcessing(false);
+        return;
+      }
+      setProgress((p) => ({ ...p, order: "done" }));
+    } else {
+       // If resuming, mark order as done
+       setProgress((p) => ({ ...p, order: "done" }));
     }
-    const workspaceOrderId = orderRes.workspaceOrderId;
-    setProgress((p) => ({ ...p, order: "done" }));
 
     // 2. Admin Setup
     setProgress((p) => ({ ...p, admin: "loading" }));
     const adminRes = await setupWorkspacePrimaryAdmin(
-      workspaceOrderId,
+      workspaceOrderId!,
       adminInfo.username,
       adminInfo.firstName,
       adminInfo.lastName,
@@ -187,7 +214,7 @@ export function GoogleWorkspaceWizard({ domains }: { domains: UserDomain[] }) {
         if (!user.username) continue;
 
         const userRes = await addWorkspaceUserMailbox(
-          workspaceOrderId,
+          workspaceOrderId!,
           user.username,
           user.firstName,
           user.lastName,
@@ -378,10 +405,11 @@ export function GoogleWorkspaceWizard({ domains }: { domains: UserDomain[] }) {
 
             <div className="flex justify-center pt-8">
               <Button
-                disabled={!selectedDomain}
+                disabled={!selectedDomain || isProcessing}
                 onClick={() => setStep("plan")}
                 className="h-14 px-12 bg-zinc-900 dark:bg-zinc-50 text-white dark:text-zinc-900 font-black uppercase text-xs tracking-[0.2em] rounded-2xl shadow-2xl hover:scale-105 transition-transform"
               >
+                {isProcessing ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
                 Proceed to Plan
                 <ChevronRight className="size-4 ml-2" />
               </Button>

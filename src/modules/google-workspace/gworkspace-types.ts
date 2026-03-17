@@ -31,6 +31,8 @@ export interface GoogleWorkspaceMailbox {
   username: string;
   firstName: string;
   lastName: string;
+  password?: string | null;
+  passwordUpdatedAt?: Date | null;
   role: MailboxRole;
   status: MailboxStatus;
   createdAt: Date;

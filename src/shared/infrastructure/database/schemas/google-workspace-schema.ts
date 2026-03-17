@@ -31,6 +31,8 @@ export const googleWorkspaceMailbox = pgTable("google_workspace_mailbox", {
   username: text("username").notNull(),
   firstName: text("firstName").notNull(),
   lastName: text("lastName").notNull(),
+  password: text("password"),
+  passwordUpdatedAt: timestamp("passwordUpdatedAt"),
   role: text("role").default("user").notNull(), // admin, user
   status: text("status").default("active").notNull(), // active, suspended, deleted
   createdAt: timestamp("createdAt").defaultNow().notNull(),

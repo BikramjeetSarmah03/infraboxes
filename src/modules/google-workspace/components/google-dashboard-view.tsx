@@ -12,12 +12,16 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
+import { Loader2, Search } from "lucide-react";
 import {
   GoogleWorkspaceOrder,
   GoogleWorkspaceMailbox,
 } from "../gworkspace-types";
 import { WorkspaceOrderCard } from "./workspace-order-card";
 import { GoogleWorkspaceWizard } from "./google-workspace-wizard";
+import { deepImportWorkspace } from "../actions/gworkspace-actions";
 
 interface GoogleDashboardViewProps {
   orders: (GoogleWorkspaceOrder & { mailboxes: GoogleWorkspaceMailbox[] })[];
@@ -29,29 +33,61 @@ export function GoogleDashboardView({
   domains,
 }: GoogleDashboardViewProps) {
   const [showWizard, setShowWizard] = useState(false);
+  const [resumingOrder, setResumingOrder] = useState<(GoogleWorkspaceOrder & { mailboxes: GoogleWorkspaceMailbox[] }) | null>(null);
+  const [importDomain, setImportDomain] = useState("");
+  const [isImporting, setIsImporting] = useState(false);
 
-  if (showWizard) {
+  const handleDeepImport = async () => {
+    if (!importDomain) {
+      toast.error("Please enter a domain name");
+      return;
+    }
+
+    try {
+      setIsImporting(true);
+      const res = await deepImportWorkspace(importDomain);
+      if (res.success) {
+        toast.success("Workspace order imported successfully!");
+        setImportDomain("");
+        // No need to refresh manually, server actions + revalidatePath handle it
+      } else {
+        toast.error(res.error || "Failed to import workspace");
+      }
+    } catch (_err) {
+      toast.error("An unexpected error occurred");
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  if (showWizard || resumingOrder) {
     return (
       <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
         <div className="flex items-center gap-4">
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setShowWizard(false)}
+            onClick={() => {
+              setShowWizard(false);
+              setResumingOrder(null);
+            }}
             className="size-10 rounded-xl border border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:text-zinc-900 shadow-sm"
           >
             <ArrowLeft className="size-4" />
           </Button>
           <div className="space-y-1">
             <h1 className="text-xl font-black text-zinc-900 dark:text-zinc-50 tracking-tight">
-              Setup New Workspace
+              {resumingOrder ? "Resume Workspace Setup" : "Setup New Workspace"}
             </h1>
             <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest leading-none">
               Google Workspace Provisioning
             </p>
           </div>
         </div>
-        <GoogleWorkspaceWizard domains={domains} />
+        <GoogleWorkspaceWizard 
+          domains={domains} 
+          initialOrder={resumingOrder || undefined} 
+        />
       </div>
     );
   }
@@ -72,13 +108,33 @@ export function GoogleDashboardView({
           </p>
         </div>
 
-        <Button
-          onClick={() => setShowWizard(true)}
-          className="h-14 px-8 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-base transition-all duration-300 shadow-xl shadow-blue-500/20 gap-3 group"
-        >
-          <Plus className="size-5" />
-          Setup New Workspace
-        </Button>
+        <div className="flex flex-col sm:flex-row items-stretch gap-4">
+          <div className="flex items-center gap-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-1 pl-4 shadow-sm focus-within:ring-2 focus-within:ring-blue-500/20 transition-all">
+            <Search className="size-4 text-zinc-400" />
+            <Input
+              value={importDomain}
+              onChange={(e) => setImportDomain(e.target.value.toLowerCase())}
+              placeholder="Import domain (e.g. example.com)"
+              className="border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 h-10 w-full sm:w-64 font-bold text-zinc-600 dark:text-zinc-300"
+              onKeyDown={(e) => e.key === "Enter" && handleDeepImport()}
+            />
+            <Button
+              onClick={handleDeepImport}
+              disabled={isImporting || !importDomain}
+              className="h-10 px-6 rounded-xl bg-zinc-900 dark:bg-zinc-50 text-white dark:text-zinc-900 font-bold text-xs uppercase tracking-widest transition-all"
+            >
+              {isImporting ? <Loader2 className="size-3 animate-spin" /> : "Import"}
+            </Button>
+          </div>
+
+          <Button
+            onClick={() => setShowWizard(true)}
+            className="h-14 px-8 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-base transition-all duration-300 shadow-xl shadow-blue-500/20 gap-3 group"
+          >
+            <Plus className="size-5" />
+            Setup New Workspace
+          </Button>
+        </div>
       </div>
 
       {orders.length === 0 ? (
@@ -160,7 +216,11 @@ export function GoogleDashboardView({
           </h3>
           <div className="grid grid-cols-1 gap-6">
             {orders.map((order) => (
-              <WorkspaceOrderCard key={order.id} order={order} />
+              <WorkspaceOrderCard 
+                key={order.id} 
+                order={order} 
+                onConfigureAdmin={(order) => setResumingOrder(order)}
+              />
             ))}
           </div>
         </div>

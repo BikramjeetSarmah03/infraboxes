@@ -105,7 +105,7 @@ export async function orderWorkspace(
  */
 export async function setupWorkspaceAdmin(
   input: SetupAdminInput,
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; password?: string; error?: string }> {
   try {
     let response: Response;
 
@@ -156,7 +156,10 @@ export async function setupWorkspaceAdmin(
     const result = await response.json();
 
     if (response.ok && result.status === "Success") {
-      return { success: true };
+      return { 
+        success: true, 
+        password: result.password // RC returns this for auto-gen
+      };
     } else {
       return {
         success: false,
@@ -177,7 +180,7 @@ export async function setupWorkspaceAdmin(
  */
 export async function addMailboxUser(
   input: AddMailboxUserInput,
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; password?: string; error?: string }> {
   try {
     let response: Response;
 
@@ -220,7 +223,10 @@ export async function addMailboxUser(
     const result = await response.json();
 
     if (response.ok && result.status === "Success") {
-      return { success: true };
+      return { 
+        success: true,
+        password: result.password // RC returns this for auto-gen
+      };
     } else {
       return {
         success: false,
@@ -280,6 +286,71 @@ export async function getWorkspaceDetails(
     }
   } catch (error) {
     console.error("[gworkspace] Get details error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+/**
+ * Search Google Workspace orders
+ */
+export async function searchWorkspaceOrders(
+  params: {
+    domainName?: string;
+    customerId?: string;
+    status?: string;
+  }
+): Promise<{ success: boolean; orders?: Record<string, unknown>[]; error?: string }> {
+  try {
+    let response: Response;
+
+    if (config.proxyUrl && config.proxyToken) {
+      const queryParams = new URLSearchParams();
+      if (params.domainName) queryParams.append("domainName", params.domainName);
+      if (params.customerId) queryParams.append("customerId", params.customerId);
+      if (params.status) queryParams.append("status", params.status);
+
+      const url = `${config.proxyUrl}/googleapps/search?${queryParams.toString()}`;
+      response = await fetch(url, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${config.proxyToken}`,
+        },
+      });
+    } else {
+      if (!config.authUserId || !config.apiKey) {
+        return { success: false, error: "Missing ResellerClub config" };
+      }
+
+      const queryParams = new URLSearchParams({
+        "auth-userid": config.authUserId,
+        "api-key": config.apiKey,
+        "no-of-records": "10",
+        "page-no": "1",
+      });
+      if (params.domainName) queryParams.append("domain-name", params.domainName);
+      if (params.customerId) queryParams.append("customer-id", params.customerId);
+      if (params.status) queryParams.append("status", params.status);
+
+      const url = `${BASE_URL}/gapps/in/search.json?${queryParams.toString()}`;
+      response = await fetch(url, { headers: COMMON_HEADERS });
+    }
+
+    const result = await response.json();
+
+    if (response.ok) {
+      // The search API usually returns an object with results keys or an array
+      return { success: true, orders: result.results || (Array.isArray(result) ? result : []) };
+    } else {
+      return {
+        success: false,
+        error: result.message || result.error || "Search failed",
+      };
+    }
+  } catch (error) {
+    console.error("[gworkspace] Search error:", error);
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",

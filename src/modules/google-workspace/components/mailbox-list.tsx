@@ -1,6 +1,6 @@
 "use client";
 
-import { GoogleWorkspaceMailbox } from "../gworkspace-types";
+import type { GoogleWorkspaceMailbox } from "../gworkspace-types";
 import { Badge } from "@/components/ui/badge";
 import { 
   Table, 
@@ -10,10 +10,97 @@ import {
   TableHeader, 
   TableRow 
 } from "@/components/ui/table";
-import { User, Mail, Shield } from "lucide-react";
+import { User, Mail, Shield, Key, Copy, Check } from "lucide-react";
+import { useState } from "react";
+import { getMailboxCredentials } from "../actions/gworkspace-actions";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogTrigger 
+} from "@/components/ui/dialog";
 
 interface MailboxListProps {
   mailboxes: GoogleWorkspaceMailbox[];
+}
+
+function CredentialsButton({ mailboxId, email }: { mailboxId: string; email: string }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [credentials, setCredentials] = useState<{ email: string; password?: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const fetchCredentials = async () => {
+    setLoading(true);
+    const result = await getMailboxCredentials(mailboxId);
+    if (result.success && result.credentials) {
+      setCredentials(result.credentials);
+    } else {
+      toast.error(result.error || "Failed to load credentials");
+    }
+    setLoading(false);
+  };
+
+  const copyToClipboard = () => {
+    if (!credentials) return;
+    const text = `Email: ${credentials.email}\nPassword: ${credentials.password}`;
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    toast.success("Credentials copied to clipboard");
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => {
+      setIsOpen(open);
+      if (open && !credentials) fetchCredentials();
+    }}>
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="icon" className="size-8 text-zinc-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20">
+          <Key className="size-4" />
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-xl font-bold tracking-tight">Mailbox Credentials</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          <div className="space-y-2">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Email Address</span>
+            <div className="flex items-center gap-2 p-3 bg-zinc-50 dark:bg-zinc-900 rounded-lg border border-zinc-100 dark:border-zinc-800">
+              <span className="text-sm font-medium flex-1">{email}</span>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Password</span>
+            <div className="flex items-center gap-2 p-3 bg-zinc-50 dark:bg-zinc-900 rounded-lg border border-zinc-100 dark:border-zinc-800">
+              {loading ? (
+                <span className="text-sm text-zinc-400 animate-pulse italic">Loading...</span>
+              ) : (
+                <>
+                  <span className="text-sm font-mono flex-1">{credentials?.password || "••••••••"}</span>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="size-8 text-zinc-400 hover:text-blue-500"
+                    onClick={copyToClipboard}
+                  >
+                    {copied ? <Check className="size-4 text-emerald-500" /> : <Copy className="size-4" />}
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+          <p className="text-[10px] text-zinc-400 text-center italic">
+            Note: These are the credentials from account creation. If the user changed their password in Google, these may be outdated.
+          </p>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 export function MailboxList({ mailboxes }: MailboxListProps) {
@@ -34,7 +121,8 @@ export function MailboxList({ mailboxes }: MailboxListProps) {
             <TableHead className="font-bold text-[10px] uppercase tracking-widest text-zinc-400">Email Address</TableHead>
             <TableHead className="font-bold text-[10px] uppercase tracking-widest text-zinc-400">Name</TableHead>
             <TableHead className="font-bold text-[10px] uppercase tracking-widest text-zinc-400">Role</TableHead>
-            <TableHead className="font-bold text-[10px] uppercase tracking-widest text-zinc-400 text-right">Status</TableHead>
+            <TableHead className="font-bold text-[10px] uppercase tracking-widest text-zinc-400 text-center">Status</TableHead>
+            <TableHead className="font-bold text-[10px] uppercase tracking-widest text-zinc-400 text-right">Access</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -64,7 +152,7 @@ export function MailboxList({ mailboxes }: MailboxListProps) {
                   </Badge>
                 )}
               </TableCell>
-              <TableCell className="text-right">
+              <TableCell className="text-center">
                 <Badge 
                   className={
                     mailbox.status === "active" 
@@ -75,6 +163,9 @@ export function MailboxList({ mailboxes }: MailboxListProps) {
                 >
                   {mailbox.status}
                 </Badge>
+              </TableCell>
+              <TableCell className="text-right">
+                <CredentialsButton mailboxId={mailbox.id} email={mailbox.email} />
               </TableCell>
             </TableRow>
           ))}
