@@ -18,6 +18,7 @@ import {
   getWorkspaceDetails,
   searchWorkspaceOrders,
   addWorkspaceAccounts,
+  activateFreeEmail,
 } from "../infrastructure/gworkspace-provider";
 import type { WorkspaceOrderStatus } from "../gworkspace-types";
 import {
@@ -534,6 +535,19 @@ export async function setupWorkspacePrimaryAdmin(
     }
 
     console.log(`[gworkspace] setupWorkspacePrimaryAdmin: INVOKING PROVIDER. Domain=${order.domainName}, targetRcOrderId=${targetRcOrderId}`);
+
+    // 2.5 Activate Free Email (Prerequisite for GSuite Admin setup)
+    try {
+      console.log(`[gworkspace] setupWorkspacePrimaryAdmin: Activating Free Email for ${targetRcOrderId}`);
+      const activationResult = await activateFreeEmail(targetRcOrderId);
+      if (!activationResult.success) {
+        // If it's already activated, RC might return an error message, we check if we should proceed anyway
+        console.warn(`[gworkspace] setupWorkspacePrimaryAdmin: Free Email activation result:`, activationResult.error);
+        // We proceed because it might already be active
+      }
+    } catch (actError) {
+      console.error(`[gworkspace] setupWorkspacePrimaryAdmin: Free Email activation error (ignoring):`, actError);
+    }
 
     // 3. Call provider to setup admin
     const setupResult = await setupAdminProvider({

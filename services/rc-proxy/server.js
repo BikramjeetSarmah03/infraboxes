@@ -861,15 +861,21 @@ app.post("/googleapps/order", requireAuth, async (req, res) => {
   params.append("no-of-accounts", String(noOfAccounts || 3)); // Default 3 accounts
   params.append("invoice-option", "NoInvoice");
 
-  console.log(`[proxy] /googleapps/order: Incoming Body=`, JSON.stringify(req.body));
-  
+  console.log(
+    `[proxy] /googleapps/order: Incoming Body=`,
+    JSON.stringify(req.body),
+  );
+
   const apiUrl = `${RC_BASE_URL}/gapps/in/add.json`;
   logOutgoingRequest(apiUrl, "POST");
 
   const logParams = new URLSearchParams(params);
   logParams.set("auth-userid", "[REDACTED]");
   logParams.set("api-key", "[REDACTED]");
-  console.log(`[proxy] /googleapps/order: Redacted Params Body=`, logParams.toString());
+  console.log(
+    `[proxy] /googleapps/order: Redacted Params Body=`,
+    logParams.toString(),
+  );
 
   try {
     const response = await fetch(apiUrl, {
@@ -928,8 +934,11 @@ app.post("/googleapps/add-user", requireAuth, async (req, res) => {
   params.append("first-name", firstName);
   params.append("last-name", lastName);
 
-  console.log(`[proxy] /googleapps/add-user: Incoming Body=`, JSON.stringify(req.body));
-  
+  console.log(
+    `[proxy] /googleapps/add-user: Incoming Body=`,
+    JSON.stringify(req.body),
+  );
+
   const regions = ["in", "se", "gbl"];
   let lastError = null;
   let lastStatus = 502;
@@ -937,7 +946,7 @@ app.post("/googleapps/add-user", requireAuth, async (req, res) => {
   for (const region of regions) {
     const apiUrl = `${RC_BASE_URL}/gapps/${region}/add-user.json`;
     console.log(`[proxy] /googleapps/add-user: Trying region ${region}`);
-    
+
     try {
       const response = await fetch(apiUrl, {
         method: "POST",
@@ -947,16 +956,21 @@ app.post("/googleapps/add-user", requireAuth, async (req, res) => {
         },
         body: params.toString(),
       });
-      
+
       const body = await response.text();
       const contentType = response.headers.get("content-type");
 
-      logUpstreamDiagnostics(`/googleapps/add-user (${region})`, response.status, contentType, body);
+      logUpstreamDiagnostics(
+        `/googleapps/add-user (${region})`,
+        response.status,
+        contentType,
+        body,
+      );
 
       if (response.status === 200) {
         return res.status(200).send(body);
       }
-      
+
       lastError = body;
       lastStatus = response.status;
     } catch (error) {
@@ -976,7 +990,9 @@ app.get("/googleapps/details", requireAuth, async (req, res) => {
   const orderId = req.query["order-id"];
 
   if (!orderId) {
-    return res.status(400).json({ error: "order-id query parameter is required" });
+    return res
+      .status(400)
+      .json({ error: "order-id query parameter is required" });
   }
 
   if (!RESELLERCLUB_AUTH_USER_ID || !RESELLERCLUB_API_KEY) {
@@ -994,8 +1010,10 @@ app.get("/googleapps/details", requireAuth, async (req, res) => {
     params.append("order-id", String(orderId));
 
     const url = `${RC_BASE_URL}/gapps/${region}/details.json?${params.toString()}`;
-    console.log(`[proxy] /googleapps/details: Trying region ${region} - ${url}`);
-    
+    console.log(
+      `[proxy] /googleapps/details: Trying region ${region} - ${url}`,
+    );
+
     try {
       const response = await fetch(url, {
         method: "GET",
@@ -1015,7 +1033,7 @@ app.get("/googleapps/details", requireAuth, async (req, res) => {
         if (contentType) res.set("content-type", contentType);
         return res.status(200).send(body);
       }
-      
+
       lastError = body;
       lastStatus = response.status;
     } catch (error) {
@@ -1055,7 +1073,10 @@ app.post("/googleapps/admin/add", requireAuth, async (req, res) => {
     req.body["entityid"] ||
     req.body["orderid"];
 
-  console.log(`[proxy] /googleapps/admin/add: Incoming Body=`, JSON.stringify(req.body));
+  console.log(
+    `[proxy] /googleapps/admin/add: Incoming Body=`,
+    JSON.stringify(req.body),
+  );
   console.log(`[proxy] /googleapps/admin/add: Resolved ID=${actualOrderId}`);
 
   const missingFields = [];
@@ -1065,11 +1086,13 @@ app.post("/googleapps/admin/add", requireAuth, async (req, res) => {
   if (!lastName) missingFields.push("lastName");
 
   if (missingFields.length > 0) {
-    console.error(`[proxy] /googleapps/admin/add: Missing required fields: ${missingFields.join(", ")}`);
+    console.error(
+      `[proxy] /googleapps/admin/add: Missing required fields: ${missingFields.join(", ")}`,
+    );
     return res.status(400).json({
       error: `Missing required fields: ${missingFields.join(", ")}`,
       missing: missingFields,
-      received: { orderId: actualOrderId, emailAddress, firstName, lastName }
+      received: { orderId: actualOrderId, emailAddress, firstName, lastName },
     });
   }
 
@@ -1080,18 +1103,19 @@ app.post("/googleapps/admin/add", requireAuth, async (req, res) => {
   const params = new URLSearchParams();
   params.append("auth-userid", RESELLERCLUB_AUTH_USER_ID);
   params.append("api-key", RESELLERCLUB_API_KEY);
-  
+
   const idStr = String(actualOrderId || 0);
   params.append("order-id", idStr);
-  
+
   params.append("email-address", emailAddress);
   params.append("first-name", firstName);
   params.append("last-name", lastName);
-  
+
   // ResellerClub often requires alternate email to be DIFFERENT from the primary email
-  const finalAlternateEmail = alternateEmailAddress && alternateEmailAddress !== emailAddress 
-    ? alternateEmailAddress 
-    : `backup-${firstName.toLowerCase()}@sellbotic.org`; // Fallback to a different domain if same
+  const finalAlternateEmail =
+    alternateEmailAddress && alternateEmailAddress !== emailAddress
+      ? alternateEmailAddress
+      : `backup-${firstName.toLowerCase()}@sellbotic.org`; // Fallback to a different domain if same
 
   params.append("alternate-email-address", finalAlternateEmail);
   params.append("name", customerName || `${firstName} ${lastName}`);
@@ -1104,8 +1128,10 @@ app.post("/googleapps/admin/add", requireAuth, async (req, res) => {
 
   for (const region of regions) {
     const apiUrl = `${RC_BASE_URL}/gapps/${region}/admin/add.json`;
-    console.log(`[proxy] /googleapps/admin/add: Trying region ${region} - ${apiUrl}`);
-    
+    console.log(
+      `[proxy] /googleapps/admin/add: Trying region ${region} - ${apiUrl}`,
+    );
+
     try {
       const response = await fetch(apiUrl, {
         method: "POST",
@@ -1115,7 +1141,7 @@ app.post("/googleapps/admin/add", requireAuth, async (req, res) => {
         },
         body: params.toString(),
       });
-      
+
       const body = await response.text();
       const contentType = response.headers.get("content-type");
 
@@ -1134,14 +1160,20 @@ app.post("/googleapps/admin/add", requireAuth, async (req, res) => {
         if (jsonBody.status === "ERROR") {
           isSuccess = false;
           // "Invalid Order ID" or similar means we might be in the wrong region
-          if (jsonBody.message?.toLowerCase().includes("invalid order id") || 
-              jsonBody.message?.toLowerCase().includes("does not exist")) {
+          if (
+            jsonBody.message?.toLowerCase().includes("invalid order id") ||
+            jsonBody.message?.toLowerCase().includes("does not exist")
+          ) {
             isRegionalError = true;
           }
         }
       } catch (e) {
+        console.log({ errorInAdminAdd: e });
         // If not JSON, but status is 200, assume success unless it's a known error string
-        if (isSuccess && (body.includes("Invalid Order ID") || body.includes("does not exist"))) {
+        if (
+          isSuccess &&
+          (body.includes("Invalid Order ID") || body.includes("does not exist"))
+        ) {
           isSuccess = false;
           isRegionalError = true;
         }
@@ -1151,12 +1183,11 @@ app.post("/googleapps/admin/add", requireAuth, async (req, res) => {
         if (contentType) res.set("content-type", contentType);
         return res.status(200).send(body);
       }
-      
+
       if (!isRegionalError) {
         lastError = body;
         lastStatus = response.status;
       }
-
     } catch (error) {
       console.error(`[googleapps/admin/add] Error in region ${region}:`, error);
       lastError = error.message;
@@ -1164,7 +1195,9 @@ app.post("/googleapps/admin/add", requireAuth, async (req, res) => {
   }
 
   // If we're here, all regions failed
-  res.status(lastStatus).send(lastError || "Failed to setup admin account in any region");
+  res
+    .status(lastStatus)
+    .send(lastError || "Failed to setup admin account in any region");
 });
 
 /**
@@ -1177,9 +1210,10 @@ app.post("/googleapps/admin/add", requireAuth, async (req, res) => {
 // Delete accounts (license reduction)
 app.post("/googleapps/delete-account", requireAuth, async (req, res) => {
   const { orderId, noOfAccounts } = req.body ?? {};
-  
+
   if (!orderId) return res.status(400).json({ error: "Missing orderId" });
-  if (!noOfAccounts) return res.status(400).json({ error: "Missing noOfAccounts" });
+  if (!noOfAccounts)
+    return res.status(400).json({ error: "Missing noOfAccounts" });
 
   if (!RESELLERCLUB_AUTH_USER_ID || !RESELLERCLUB_API_KEY) {
     return res.status(500).json({ error: "Missing ResellerClub credentials" });
@@ -1195,7 +1229,7 @@ app.post("/googleapps/delete-account", requireAuth, async (req, res) => {
   for (const region of regions) {
     const apiUrl = `${RC_BASE_URL}/gapps/${region}/delete-account.json`;
     console.log(`[proxy] /googleapps/delete-account: Trying region ${region}`);
-    
+
     try {
       const response = await fetch(apiUrl, {
         method: "POST",
@@ -1205,16 +1239,21 @@ app.post("/googleapps/delete-account", requireAuth, async (req, res) => {
         },
         body: params.toString(),
       });
-      
+
       const body = await response.text();
       const contentType = response.headers.get("content-type");
 
-      logUpstreamDiagnostics(`/googleapps/delete-account (${region})`, response.status, contentType, body);
+      logUpstreamDiagnostics(
+        `/googleapps/delete-account (${region})`,
+        response.status,
+        contentType,
+        body,
+      );
 
       if (response.status === 200) {
         return res.status(200).send(body);
       }
-      
+
       lastError = body;
       lastStatus = response.status;
     } catch (error) {
@@ -1222,13 +1261,15 @@ app.post("/googleapps/delete-account", requireAuth, async (req, res) => {
     }
   }
 
-  res.status(lastStatus).send(lastError || "Failed to delete account in any region");
+  res
+    .status(lastStatus)
+    .send(lastError || "Failed to delete account in any region");
 });
 
 // Get Order ID from domain name
 app.get("/googleapps/order-id", requireAuth, async (req, res) => {
   const { domainName } = req.query;
-  
+
   if (!domainName) return res.status(400).json({ error: "Missing domainName" });
 
   if (!RESELLERCLUB_AUTH_USER_ID || !RESELLERCLUB_API_KEY) {
@@ -1236,7 +1277,7 @@ app.get("/googleapps/order-id", requireAuth, async (req, res) => {
   }
 
   const regions = ["in", "se", "gbl"];
-  
+
   for (const region of regions) {
     const params = new URLSearchParams({
       "auth-userid": RESELLERCLUB_AUTH_USER_ID,
@@ -1246,19 +1287,25 @@ app.get("/googleapps/order-id", requireAuth, async (req, res) => {
 
     const apiUrl = `${RC_BASE_URL}/gapps/${region}/orderid.json?${params.toString()}`;
     console.log(`[proxy] /googleapps/order-id: Trying region ${region}`);
-    
+
     try {
       const response = await fetch(apiUrl);
       const result = await response.json();
-      
+
       // If result is a number (string or actual number), it's the order ID
-      if (response.status === 200 && !Number.isNaN(Number(result)) && typeof result !== 'object') {
+      if (
+        response.status === 200 &&
+        !Number.isNaN(Number(result)) &&
+        typeof result !== "object"
+      ) {
         return res.status(200).json(result);
       }
-      
+
       // If result is an object with error, continue to next region
       if (result.status === "ERROR") {
-        console.log(`[proxy] /googleapps/order-id: Region ${region} failed: ${result.message}`);
+        console.log(
+          `[proxy] /googleapps/order-id: Region ${region} failed: ${result.message}`,
+        );
         continue;
       }
     } catch (error) {
@@ -1266,7 +1313,9 @@ app.get("/googleapps/order-id", requireAuth, async (req, res) => {
     }
   }
 
-  res.status(404).json({ error: "Order ID not found for this domain in any region" });
+  res
+    .status(404)
+    .json({ error: "Order ID not found for this domain in any region" });
 });
 
 app.get("/googleapps/search", requireAuth, async (req, res) => {
@@ -1294,11 +1343,14 @@ app.get("/googleapps/search", requireAuth, async (req, res) => {
 
     const url = `${RC_BASE_URL}/gapps/${region}/search.json?${params.toString()}`;
     console.log(`[proxy] /googleapps/search: Trying region ${region}`);
-    
+
     try {
-      const response = await fetch(url, { method: "GET", headers: UPSTREAM_HEADERS });
+      const response = await fetch(url, {
+        method: "GET",
+        headers: UPSTREAM_HEADERS,
+      });
       const data = await response.json();
-      
+
       if (response.status === 200 && Array.isArray(data)) {
         // Some RC search APIs return an array of results
         combinedResults = combinedResults.concat(data);
@@ -1337,7 +1389,10 @@ app.post("/googleapps/add-account", requireAuth, async (req, res) => {
     req.body["entityid"] ||
     req.body["orderid"];
 
-  console.log(`[proxy] /googleapps/add-account: Incoming Body=`, JSON.stringify(req.body));
+  console.log(
+    `[proxy] /googleapps/add-account: Incoming Body=`,
+    JSON.stringify(req.body),
+  );
   console.log(`[proxy] /googleapps/add-account: Resolved ID=${actualOrderId}`);
 
   const missingFields = [];
@@ -1345,11 +1400,13 @@ app.post("/googleapps/add-account", requireAuth, async (req, res) => {
   if (!noOfAccounts) missingFields.push("noOfAccounts");
 
   if (missingFields.length > 0) {
-    console.error(`[proxy] /googleapps/add-account: Missing required fields: ${missingFields.join(", ")}`);
-    return res.status(400).json({ 
+    console.error(
+      `[proxy] /googleapps/add-account: Missing required fields: ${missingFields.join(", ")}`,
+    );
+    return res.status(400).json({
       error: `Missing required fields: ${missingFields.join(", ")}`,
       missing: missingFields,
-      received: { orderId: actualOrderId, noOfAccounts }
+      received: { orderId: actualOrderId, noOfAccounts },
     });
   }
 
@@ -1360,19 +1417,22 @@ app.post("/googleapps/add-account", requireAuth, async (req, res) => {
   const params = new URLSearchParams();
   params.append("auth-userid", RESELLERCLUB_AUTH_USER_ID);
   params.append("api-key", RESELLERCLUB_API_KEY);
-  
+
   const idStr = String(actualOrderId || 0);
   params.append("order-id", idStr);
   params.append("entity-id", idStr);
   params.append("entityId", idStr);
   params.append("entityid", idStr);
   params.append("orderid", idStr);
-  
+
   const logParams = new URLSearchParams(params);
   logParams.set("auth-userid", "[REDACTED]");
   logParams.set("api-key", "[REDACTED]");
-  console.log(`[proxy] /googleapps/add-account: Redacted Params Body=`, logParams.toString());
-  
+  console.log(
+    `[proxy] /googleapps/add-account: Redacted Params Body=`,
+    logParams.toString(),
+  );
+
   params.append("no-of-accounts", String(noOfAccounts));
   params.append("invoice-option", invoiceOption || "NoInvoice");
 
@@ -1383,7 +1443,7 @@ app.post("/googleapps/add-account", requireAuth, async (req, res) => {
   for (const region of regions) {
     const apiUrl = `${RC_BASE_URL}/gapps/${region}/add-account.json`;
     console.log(`[proxy] /googleapps/add-account: Trying region ${region}`);
-    
+
     try {
       const response = await fetch(apiUrl, {
         method: "POST",
@@ -1393,16 +1453,21 @@ app.post("/googleapps/add-account", requireAuth, async (req, res) => {
         },
         body: params.toString(),
       });
-      
+
       const body = await response.text();
       const contentType = response.headers.get("content-type");
 
-      logUpstreamDiagnostics(`/googleapps/add-account (${region})`, response.status, contentType, body);
+      logUpstreamDiagnostics(
+        `/googleapps/add-account (${region})`,
+        response.status,
+        contentType,
+        body,
+      );
 
       if (response.status === 200) {
         return res.status(200).send(body);
       }
-      
+
       lastError = body;
       lastStatus = response.status;
     } catch (error) {
@@ -1410,7 +1475,9 @@ app.post("/googleapps/add-account", requireAuth, async (req, res) => {
     }
   }
 
-  res.status(lastStatus).send(lastError || "Failed to add accounts in any region");
+  res
+    .status(lastStatus)
+    .send(lastError || "Failed to add accounts in any region");
 });
 
 /**
@@ -1424,7 +1491,7 @@ async function tryGSuiteRegions(endpoint, method, params, res) {
   for (const region of regions) {
     const apiUrl = `${RC_BASE_URL}/gapps/${region}/${endpoint}.json`;
     console.log(`[proxy] GSuite Action: Trying ${method} ${apiUrl}`);
-    
+
     try {
       const response = await fetch(apiUrl, {
         method: method,
@@ -1434,11 +1501,16 @@ async function tryGSuiteRegions(endpoint, method, params, res) {
         },
         body: method === "POST" ? params.toString() : undefined,
       });
-      
+
       const body = await response.text();
       const contentType = response.headers.get("content-type");
 
-      logUpstreamDiagnostics(`/gapps/${endpoint} (${region})`, response.status, contentType, body);
+      logUpstreamDiagnostics(
+        `/gapps/${endpoint} (${region})`,
+        response.status,
+        contentType,
+        body,
+      );
 
       let isSuccess = response.status === 200;
       let isRegionalError = false;
@@ -1447,13 +1519,18 @@ async function tryGSuiteRegions(endpoint, method, params, res) {
         const jsonBody = JSON.parse(body);
         if (jsonBody.status === "ERROR") {
           isSuccess = false;
-          if (jsonBody.message?.toLowerCase().includes("invalid order id") || 
-              jsonBody.message?.toLowerCase().includes("does not exist")) {
+          if (
+            jsonBody.message?.toLowerCase().includes("invalid order id") ||
+            jsonBody.message?.toLowerCase().includes("does not exist")
+          ) {
             isRegionalError = true;
           }
         }
       } catch (e) {
-        if (isSuccess && (body.includes("Invalid Order ID") || body.includes("does not exist"))) {
+        if (
+          isSuccess &&
+          (body.includes("Invalid Order ID") || body.includes("does not exist"))
+        ) {
           isSuccess = false;
           isRegionalError = true;
         }
@@ -1463,7 +1540,7 @@ async function tryGSuiteRegions(endpoint, method, params, res) {
         if (contentType) res.set("content-type", contentType);
         return res.status(200).send(body);
       }
-      
+
       if (!isRegionalError) {
         lastError = body;
         lastStatus = response.status;
@@ -1473,7 +1550,9 @@ async function tryGSuiteRegions(endpoint, method, params, res) {
     }
   }
 
-  res.status(lastStatus).send(lastError || `Failed to perform ${endpoint} in any region`);
+  res
+    .status(lastStatus)
+    .send(lastError || `Failed to perform ${endpoint} in any region`);
 }
 
 /**
@@ -1544,6 +1623,56 @@ app.get("/googleapps/dns-records", requireAuth, async (req, res) => {
     "order-id": String(orderId),
   });
   return tryGSuiteRegions("dns-records", "GET", params, res);
+});
+
+/**
+ * Activate Free Email service
+ * POST /googleapps/activate-free-email
+ */
+app.post("/googleapps/activate-free-email", requireAuth, async (req, res) => {
+  const { orderId } = req.body ?? {};
+  if (!orderId) return res.status(400).json({ error: "Missing orderId" });
+
+  const params = new URLSearchParams({
+    "auth-userid": RESELLERCLUB_AUTH_USER_ID,
+    "api-key": RESELLERCLUB_API_KEY,
+    "order-id": String(orderId),
+  });
+
+  // Mail activation might also be regional or global.
+  // We'll try a few common patterns if the first fails.
+  const patterns = [
+    `${RC_BASE_URL}/mail/activate.json`,
+    `${RC_BASE_URL}/mail/in/activate.json`,
+    `${RC_BASE_URL}/mail/se/activate.json`,
+  ];
+
+  let lastError = null;
+  let lastStatus = 502;
+
+  for (const url of patterns) {
+    const fullUrl = `${url}?${params.toString()}`;
+    console.log(`[proxy] /googleapps/activate-free-email: Trying ${fullUrl}`);
+
+    try {
+      const response = await fetch(fullUrl, {
+        method: "POST",
+        headers: UPSTREAM_HEADERS,
+      });
+      const body = await response.text();
+      logUpstreamDiagnostics(`/mail/activate`, response.status, null, body);
+
+      if (response.status === 200) {
+        return res.status(200).send(body);
+      }
+      lastError = body;
+      lastStatus = response.status;
+    } catch (error) {
+      lastError = error.message;
+    }
+  }
+
+  res.status(lastStatus).send(lastError || "Failed to activate free email");
 });
 
 // ===== DNS Management Endpoints =====

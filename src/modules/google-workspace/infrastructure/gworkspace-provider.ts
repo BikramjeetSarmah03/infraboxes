@@ -632,6 +632,44 @@ export async function getWorkspaceDnsRecords(
 }
 
 /**
+ * Activate Free Email service for a domain
+ */
+export async function activateFreeEmail(
+  rcOrderId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    let response: Response;
+
+    if (config.proxyUrl && config.proxyToken) {
+      const url = `${config.proxyUrl}/googleapps/activate-free-email`;
+      response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${config.proxyToken}`,
+        },
+        body: JSON.stringify({ orderId: rcOrderId }),
+      });
+    } else {
+      const params = new URLSearchParams({
+        "auth-userid": config.authUserId,
+        "api-key": config.apiKey,
+        "order-id": rcOrderId,
+      });
+      const url = `${BASE_URL}/mail/activate.json?${params.toString()}`;
+      response = await fetch(url, { method: "POST", headers: COMMON_HEADERS });
+    }
+
+    const result = await response.json();
+    return response.ok && result.status === "Success"
+      ? { success: true }
+      : { success: false, error: result.message || "Activation failed" };
+  } catch (error) {
+    return { success: false, error: "Activation error" };
+  }
+}
+
+/**
  * Delete a specific mailbox user
  */
 export async function deleteMailboxUser(
