@@ -1126,24 +1126,33 @@ app.post("/googleapps/admin/add", requireAuth, async (req, res) => {
         body,
       );
 
-      // If success or a generic validation error (not a 404 or regional error), return it
-      // ResellerClub returns 404 if the order doesn't exist in that regional bucket
-      // or if the URL is wrong.
-      if (response.status === 200) {
+      let isSuccess = response.status === 200;
+      let isRegionalError = false;
+
+      try {
+        const jsonBody = JSON.parse(body);
+        if (jsonBody.status === "ERROR") {
+          isSuccess = false;
+          // "Invalid Order ID" or similar means we might be in the wrong region
+          if (jsonBody.message?.toLowerCase().includes("invalid order id") || 
+              jsonBody.message?.toLowerCase().includes("does not exist")) {
+            isRegionalError = true;
+          }
+        }
+      } catch (e) {
+        // If not JSON, but status is 200, assume success unless it's a known error string
+        if (isSuccess && (body.includes("Invalid Order ID") || body.includes("does not exist"))) {
+          isSuccess = false;
+          isRegionalError = true;
+        }
+      }
+
+      if (isSuccess) {
         if (contentType) res.set("content-type", contentType);
         return res.status(200).send(body);
       }
       
-      // If we got a real error from RC (not just a 404 regional mismatch), save it
-      try {
-        const jsonBody = JSON.parse(body);
-        if (jsonBody.status === "ERROR" && !body.includes("does not exist") && response.status !== 404) {
-           // If it's a domain mismatch error, we might be in the wrong region, so we continue.
-           // But if it's something else, we might want to collect it.
-           lastError = body;
-           lastStatus = response.status;
-        }
-      } catch (e) {
+      if (!isRegionalError) {
         lastError = body;
         lastStatus = response.status;
       }
@@ -1431,13 +1440,34 @@ async function tryGSuiteRegions(endpoint, method, params, res) {
 
       logUpstreamDiagnostics(`/gapps/${endpoint} (${region})`, response.status, contentType, body);
 
-      if (response.status === 200) {
+      let isSuccess = response.status === 200;
+      let isRegionalError = false;
+
+      try {
+        const jsonBody = JSON.parse(body);
+        if (jsonBody.status === "ERROR") {
+          isSuccess = false;
+          if (jsonBody.message?.toLowerCase().includes("invalid order id") || 
+              jsonBody.message?.toLowerCase().includes("does not exist")) {
+            isRegionalError = true;
+          }
+        }
+      } catch (e) {
+        if (isSuccess && (body.includes("Invalid Order ID") || body.includes("does not exist"))) {
+          isSuccess = false;
+          isRegionalError = true;
+        }
+      }
+
+      if (isSuccess) {
         if (contentType) res.set("content-type", contentType);
         return res.status(200).send(body);
       }
       
-      lastError = body;
-      lastStatus = response.status;
+      if (!isRegionalError) {
+        lastError = body;
+        lastStatus = response.status;
+      }
     } catch (error) {
       lastError = error.message;
     }
