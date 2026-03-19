@@ -50,6 +50,7 @@ export interface CreateWorkspaceOrderInput {
 export interface SetupAdminInput {
   workspaceOrderId: string;
   rcOrderId: string;
+  domainName: string;
   emailPrefix: string;
   firstName: string;
   lastName: string;

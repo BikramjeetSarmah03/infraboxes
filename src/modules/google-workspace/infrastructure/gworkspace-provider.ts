@@ -7,7 +7,8 @@ import { ResellerClubConfig } from "@/modules/domains/domain-types";
 import { 
   RCWorkspaceOrderDetails, 
   SetupAdminInput, 
-  AddMailboxUserInput 
+  AddMailboxUserInput,
+  WorkspaceOrderStatus
 } from "../gworkspace-types";
 
 const config: ResellerClubConfig = {
@@ -110,6 +111,7 @@ export async function setupWorkspaceAdmin(
     let response: Response;
 
     if (config.proxyUrl && config.proxyToken) {
+      const fullEmail = `${input.emailPrefix.trim()}@${input.domainName.toLowerCase().trim()}`;
       const url = `${config.proxyUrl}/googleapps/admin/add`;
       response = await fetch(url, {
         method: "POST",
@@ -119,7 +121,8 @@ export async function setupWorkspaceAdmin(
         },
         body: JSON.stringify({
           orderId: input.rcOrderId,
-          emailAddress: input.emailPrefix,
+          domainName: input.domainName,
+          emailAddress: fullEmail,
           firstName: input.firstName,
           lastName: input.lastName,
           alternateEmailAddress: input.alternateEmail,
@@ -133,11 +136,13 @@ export async function setupWorkspaceAdmin(
         return { success: false, error: "Missing ResellerClub config" };
       }
 
+      const fullEmail = `${input.emailPrefix.trim()}@${input.domainName.toLowerCase().trim()}`;
       const params = new URLSearchParams({
-        "auth-userid": config.authUserId,
-        "api-key": config.apiKey,
+        "auth-userid": config.authUserId || "",
+        "api-key": config.apiKey || "",
         "order-id": input.rcOrderId,
-        "email-address": input.emailPrefix,
+        "email-address": fullEmail,
+        "domain-name": input.domainName.toLowerCase().trim(),
         "first-name": input.firstName,
         "last-name": input.lastName,
         "alternate-email-address": input.alternateEmail,
@@ -426,5 +431,321 @@ export async function addWorkspaceAccounts(
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
     };
+  }
+}
+
+/**
+ * Renew Google Workspace order
+ */
+export async function renewWorkspace(
+  rcOrderId: string,
+  months: number = 12
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    let response: Response;
+
+    if (config.proxyUrl && config.proxyToken) {
+      const url = `${config.proxyUrl}/googleapps/renew`;
+      response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${config.proxyToken}`,
+        },
+        body: JSON.stringify({
+          orderId: rcOrderId,
+          months,
+        }),
+      });
+    } else {
+      const params = new URLSearchParams({
+        "auth-userid": config.authUserId,
+        "api-key": config.apiKey,
+        "order-id": rcOrderId,
+        months: months.toString(),
+        "invoice-option": "NoInvoice",
+      });
+      const url = `${BASE_URL}/googleapps/renew.json?${params.toString()}`;
+      response = await fetch(url, { method: "POST", headers: COMMON_HEADERS });
+    }
+
+    const result = await response.json();
+    if (response.ok && (result.status === "Success" || result.actionid)) {
+      return { success: true };
+    }
+    return { success: false, error: result.message || "Renewal failed" };
+  } catch (error) {
+    return { success: false, error: "Renewal error" };
+  }
+}
+
+/**
+ * Suspend Google Workspace order
+ */
+export async function suspendWorkspace(
+  rcOrderId: string,
+  reason: string = "Manual suspension"
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    let response: Response;
+
+    if (config.proxyUrl && config.proxyToken) {
+      const url = `${config.proxyUrl}/googleapps/suspend`;
+      response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${config.proxyToken}`,
+        },
+        body: JSON.stringify({ orderId: rcOrderId, reason }),
+      });
+    } else {
+      const params = new URLSearchParams({
+        "auth-userid": config.authUserId,
+        "api-key": config.apiKey,
+        "order-id": rcOrderId,
+        reason,
+      });
+      const url = `${BASE_URL}/googleapps/suspend.json?${params.toString()}`;
+      response = await fetch(url, { method: "POST", headers: COMMON_HEADERS });
+    }
+
+    const result = await response.json();
+    return response.ok && result.status === "Success" 
+      ? { success: true }
+      : { success: false, error: result.message || "Suspension failed" };
+  } catch (error) {
+    return { success: false, error: "Suspension error" };
+  }
+}
+
+/**
+ * Unsuspend Google Workspace order
+ */
+export async function unsuspendWorkspace(
+  rcOrderId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    let response: Response;
+
+    if (config.proxyUrl && config.proxyToken) {
+      const url = `${config.proxyUrl}/googleapps/unsuspend`;
+      response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${config.proxyToken}`,
+        },
+        body: JSON.stringify({ orderId: rcOrderId }),
+      });
+    } else {
+      const params = new URLSearchParams({
+        "auth-userid": config.authUserId,
+        "api-key": config.apiKey,
+        "order-id": rcOrderId,
+      });
+      const url = `${BASE_URL}/googleapps/unsuspend.json?${params.toString()}`;
+      response = await fetch(url, { method: "POST", headers: COMMON_HEADERS });
+    }
+
+    const result = await response.json();
+    return response.ok && result.status === "Success" 
+      ? { success: true }
+      : { success: false, error: result.message || "Unsuspension failed" };
+  } catch (error) {
+    return { success: false, error: "Unsuspension error" };
+  }
+}
+
+/**
+ * Delete (Cancel) Google Workspace order
+ */
+export async function deleteWorkspace(
+  rcOrderId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    let response: Response;
+
+    if (config.proxyUrl && config.proxyToken) {
+      const url = `${config.proxyUrl}/googleapps/delete`;
+      response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${config.proxyToken}`,
+        },
+        body: JSON.stringify({ orderId: rcOrderId }),
+      });
+    } else {
+      const params = new URLSearchParams({
+        "auth-userid": config.authUserId,
+        "api-key": config.apiKey,
+        "order-id": rcOrderId,
+      });
+      const url = `${BASE_URL}/googleapps/delete.json?${params.toString()}`;
+      response = await fetch(url, { method: "POST", headers: COMMON_HEADERS });
+    }
+
+    const result = await response.json();
+    return response.ok && result.status === "Success" 
+      ? { success: true }
+      : { success: false, error: result.message || "Deletion failed" };
+  } catch {
+    return { success: false, error: "Deletion error" };
+  }
+}
+
+/**
+ * Get Google Workspace specific DNS records
+ */
+export async function getWorkspaceDnsRecords(
+  domainName: string
+): Promise<{ success: boolean; records?: Record<string, any>[]; error?: string }> {
+  try {
+    let response: Response;
+
+    if (config.proxyUrl && config.proxyToken) {
+      const url = `${config.proxyUrl}/googleapps/dns-records?domain-name=${domainName}`;
+      response = await fetch(url, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${config.proxyToken}`,
+        },
+      });
+    } else {
+      const params = new URLSearchParams({
+        "auth-userid": config.authUserId,
+        "api-key": config.apiKey,
+        "domain-name": domainName,
+      });
+      const url = `${BASE_URL}/googleapps/dns-records.json?${params.toString()}`;
+      response = await fetch(url, { method: "GET", headers: COMMON_HEADERS });
+    }
+
+    const result = await response.json();
+    return response.ok 
+      ? { success: true, records: result }
+      : { success: false, error: result.message || "Failed to fetch DNS records" };
+  } catch (error) {
+    return { success: false, error: "DNS records fetch error" };
+  }
+}
+
+/**
+ * Delete a specific mailbox user
+ */
+export async function deleteMailboxUser(
+  domainName: string,
+  username: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    let response: Response;
+
+    if (config.proxyUrl && config.proxyToken) {
+      const url = `${config.proxyUrl}/googleapps/delete-user`;
+      response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${config.proxyToken}`,
+        },
+        body: JSON.stringify({ domainName, username }),
+      });
+    } else {
+      const params = new URLSearchParams({
+        "auth-userid": config.authUserId,
+        "api-key": config.apiKey,
+        "domain-name": domainName,
+        username,
+      });
+      const url = `${BASE_URL}/googleapps/delete-user.json?${params.toString()}`;
+      response = await fetch(url, { method: "POST", headers: COMMON_HEADERS });
+    }
+
+    const result = await response.json();
+    return response.ok && result.status === "Success" 
+      ? { success: true }
+      : { success: false, error: result.message || "User deletion failed" };
+  } catch (error) {
+    return { success: false, error: "User deletion error" };
+  }
+}
+
+/**
+ * Delete accounts (license reduction)
+ */
+export async function deleteWorkspaceAccounts(
+  rcOrderId: string,
+  noOfAccounts: number
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    let response: Response;
+
+    if (config.proxyUrl && config.proxyToken) {
+      const url = `${config.proxyUrl}/googleapps/delete-account`;
+      response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${config.proxyToken}`,
+        },
+        body: JSON.stringify({ orderId: rcOrderId, noOfAccounts }),
+      });
+    } else {
+      const params = new URLSearchParams({
+        "auth-userid": config.authUserId,
+        "api-key": config.apiKey,
+        "order-id": rcOrderId,
+        "no-of-accounts": noOfAccounts.toString(),
+      });
+      const url = `${BASE_URL}/googleapps/delete-account.json?${params.toString()}`;
+      response = await fetch(url, { method: "POST", headers: COMMON_HEADERS });
+    }
+
+    const result = await response.json();
+    return response.ok 
+      ? { success: true }
+      : { success: false, error: result.message || "License reduction failed" };
+  } catch (error) {
+    return { success: false, error: "License reduction error" };
+  }
+}
+
+/**
+ * Get Order ID from domain name
+ */
+export async function getGSuiteOrderId(
+  domainName: string
+): Promise<{ success: boolean; orderId?: string; error?: string }> {
+  try {
+    let response: Response;
+
+    if (config.proxyUrl && config.proxyToken) {
+      const url = `${config.proxyUrl}/googleapps/order-id?domainName=${domainName}`;
+      response = await fetch(url, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${config.proxyToken}`,
+        },
+      });
+    } else {
+      const params = new URLSearchParams({
+        "auth-userid": config.authUserId,
+        "api-key": config.apiKey,
+        "domain-name": domainName,
+      });
+      const url = `${BASE_URL}/googleapps/orderid.json?${params.toString()}`;
+      response = await fetch(url, { method: "GET", headers: COMMON_HEADERS });
+    }
+
+    const result = await response.json();
+    // Result might be just the number or an error object
+    if (typeof result === "number" || (typeof result === "string" && !Number.isNaN(Number(result)))) {
+      return { success: true, orderId: result.toString() };
+    }
+    
+    return { success: false, error: result.message || "Failed to fetch Order ID" };
+  } catch (error) {
+    return { success: false, error: "Get Order ID error" };
   }
 }

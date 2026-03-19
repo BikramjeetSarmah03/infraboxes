@@ -24,6 +24,7 @@ import {
   addDnsRecord,
   getDomainDetailsByName,
 } from "@/modules/domains/infrastructure/resellerclub-provider";
+import { activateDns } from "@/modules/dns-records/actions/dns-actions";
 
 /**
  * Create a new Google Workspace order
@@ -57,6 +58,17 @@ export async function createWorkspaceOrder(
       throw new Error(
         "ResellerClub customer account required. Please register a domain first.",
       );
+    }
+
+    // 1.5 Auto-activate DNS if not already active
+    if (!domainRecord.isDnsActivated) {
+      console.log(`[gworkspace] DNS not activated for ${domainRecord.name}, triggering activation...`);
+      const activationRes = await activateDns(domainId);
+      if (!activationRes.success) {
+        console.warn(`[gworkspace] DNS activation failed: ${activationRes.error}. Attempting to proceed anyway.`);
+      } else {
+        console.log(`[gworkspace] DNS activated successfully for ${domainRecord.name}`);
+      }
     }
 
     // 2. Place order via RC Provider
@@ -159,86 +171,67 @@ export async function deepImportWorkspace(domainName: string) {
       );
     }
 
-    // 2. Search for Workspace Order by domain name first
-    console.log(`[gworkspace] Searching Workspace API for ${domainName}...`);
-    let workspaceSearch = await searchWorkspaceOrders({ domainName });
+    // 2. Fetch Order ID directly by domain name
+    console.log(`[gworkspace] Fetching Order ID for ${domainName}...`);
+    const { getGSuiteOrderId } = await import("../infrastructure/gworkspace-provider");
+    const orderIdResult = await getGSuiteOrderId(domainName);
+    
+    let rcOrderId: string | undefined;
+    let rcOrderRaw: any;
 
-    // Fallback: If domain search fails, search by Customer ID and filter locally
-    // This is necessary because RC's domain-name filter often fails on complex demo subdomains
-    if (
-      !workspaceSearch.success ||
-      !workspaceSearch.orders ||
-      workspaceSearch.orders.length === 0
-    ) {
-      console.log(
-        `[gworkspace] Domain search failed for ${domainName}. Falling back to Customer ID search...`,
-      );
-      workspaceSearch = await searchWorkspaceOrders({
-        customerId: userRecord.resellerclubCustomerId,
-      });
+    if (orderIdResult.success && orderIdResult.orderId) {
+      rcOrderId = orderIdResult.orderId;
+      console.log(`[gworkspace] Found Order ID: ${rcOrderId}`);
+    } else {
+      // Fallback: Search for Workspace Order by domain name first
+      console.log(`[gworkspace] Direct ID fetch failed. Searching Workspace API for ${domainName}...`);
+      let workspaceSearch = await searchWorkspaceOrders({ domainName });
+
+      if (
+        !workspaceSearch.success ||
+        !workspaceSearch.orders ||
+        workspaceSearch.orders.length === 0
+      ) {
+        workspaceSearch = await searchWorkspaceOrders({
+          customerId: userRecord.resellerclubCustomerId,
+        });
+      }
+
+      if (workspaceSearch.success && workspaceSearch.orders && workspaceSearch.orders.length > 0) {
+        rcOrderRaw = (workspaceSearch.orders as any[]).find((o) => {
+          const dName = (o.domainname || o.domain_name || o["entity.description"] || "").toLowerCase();
+          const target = domainName.toLowerCase();
+          return dName === target || (dName.length > 5 && target.startsWith(dName));
+        });
+
+        if (rcOrderRaw) {
+          rcOrderId = rcOrderRaw.orderid || rcOrderRaw.entityid || rcOrderRaw["orders.orderid"] || rcOrderRaw["entity.entityid"];
+        }
+      }
     }
 
-    if (
-      !workspaceSearch.success ||
-      !workspaceSearch.orders ||
-      workspaceSearch.orders.length === 0
-    ) {
-      console.warn(
-        `[gworkspace] No workspace orders found for customer ${userRecord.resellerclubCustomerId}`,
-      );
-      throw new Error(
-        `No Google Workspace orders found for this account on ResellerClub.`,
-      );
+    if (!rcOrderId) {
+      throw new Error(`Could not find a Google Workspace order for ${domainName} on your account.`);
     }
 
-    // Filter results locally by domain name (RC search can be fuzzy or return arrays)
-    const rcOrderRaw = (workspaceSearch.orders as any[]).find((o) => {
-      const dName = (
-        o.domainname ||
-        o.domain_name ||
-        o["entity.description"] ||
-        ""
-      ).toLowerCase();
-      const target = domainName.toLowerCase();
-      // Match exactly OR match prefix if RC truncated it (common for long demo domains)
-      return dName === target || (dName.length > 5 && target.startsWith(dName));
-    });
-
-    if (!rcOrderRaw) {
-      console.error(
-        `[gworkspace] Domain ${domainName} not found in customer's ${workspaceSearch.orders.length} orders.`,
-      );
-      console.log(
-        "[gworkspace] Available orders descriptions:",
-        workspaceSearch.orders.map(
-          (o: any) => o["entity.description"] || o.domainname,
-        ),
-      );
-      throw new Error(
-        `Could not find a Google Workspace order for ${domainName} on your ResellerClub account.`,
-      );
+    // 2.a If we only have OrderId but not the raw order, fetch details to get CustomerID
+    let rcCustomerId: string | undefined;
+    if (rcOrderRaw) {
+      rcCustomerId = (rcOrderRaw.customerid || rcOrderRaw.entity_customerid || rcOrderRaw["entity.customerid"])?.toString();
+    } else {
+      const { getWorkspaceDetails } = await import("../infrastructure/gworkspace-provider");
+      const detailsRes = await getWorkspaceDetails(rcOrderId);
+      if (detailsRes.success && detailsRes.details) {
+        rcCustomerId = (detailsRes.details as any).customerid?.toString();
+      }
     }
 
-    const rcOrderId =
-      rcOrderRaw.orderid ||
-      rcOrderRaw.entityid ||
-      rcOrderRaw["orders.orderid"] ||
-      rcOrderRaw["entity.entityid"];
-    const rcCustomerId =
-      rcOrderRaw.customerid ||
-      rcOrderRaw.entity_customerid ||
-      rcOrderRaw["entity.customerid"];
-
-    if (!rcOrderId || !rcCustomerId) {
-      console.error(
-        "[gworkspace] Incomplete workspace order data from RC search:",
-        rcOrderRaw,
-      );
-      throw new Error("Could not extract Order ID from search result.");
+    if (!rcCustomerId) {
+      throw new Error("Could not determine ResellerClub Customer ID for this order.");
     }
 
     // 3. Ownership Verification
-    if (rcCustomerId.toString() !== userRecord.resellerclubCustomerId) {
+    if (rcCustomerId !== userRecord.resellerclubCustomerId) {
       console.warn(
         `[gworkspace] Ownership mismatch for ${domainName}. Order Customer: ${rcCustomerId}, Local User RC ID: ${userRecord.resellerclubCustomerId}`,
       );
@@ -328,6 +321,15 @@ export async function importWorkspaceOrder(
 
     if (!userRecord || !userRecord.resellerclubCustomerId) {
       throw new Error("ResellerClub customer required");
+    }
+
+    // 0.5 Auto-activate DNS if not already active
+    if (!domainRecord.isDnsActivated) {
+      console.log(`[gworkspace] DNS not activated for ${domainRecord.name}, triggering activation...`);
+      const activationRes = await activateDns(domainId);
+      if (!activationRes.success) {
+        console.warn(`[gworkspace] DNS activation failed: ${activationRes.error}. Attempting to proceed anyway.`);
+      }
     }
 
     // 1. Get or Search for RC Order
@@ -537,6 +539,7 @@ export async function setupWorkspacePrimaryAdmin(
     const setupResult = await setupAdminProvider({
       workspaceOrderId: order.id,
       rcOrderId: targetRcOrderId,
+      domainName: order.domainName,
       emailPrefix: emailPrefix,
       firstName,
       lastName,
@@ -896,5 +899,231 @@ export async function addWorkspaceLicensesAction(
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
     };
+  }
+}
+
+/**
+ * Renew workspace order action
+ */
+export async function renewWorkspaceAction(workspaceOrderId: string, months: number = 12) {
+  try {
+    const order = await db.query.googleWorkspaceOrder.findFirst({
+      where: eq(googleWorkspaceOrder.id, workspaceOrderId)
+    });
+    if (!order) throw new Error("Order not found");
+
+    const { renewWorkspace } = await import("../infrastructure/gworkspace-provider");
+    const res = await renewWorkspace(order.rcOrderId, months);
+    if (res.success) {
+      await db.update(googleWorkspaceOrder)
+        .set({ updatedAt: new Date() })
+        .where(eq(googleWorkspaceOrder.id, workspaceOrderId));
+      revalidatePath("/mailboxes/google");
+    }
+    return res;
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : "Renewal failed" };
+  }
+}
+
+/**
+ * Suspend workspace order action
+ */
+export async function suspendWorkspaceAction(workspaceOrderId: string) {
+  try {
+    const order = await db.query.googleWorkspaceOrder.findFirst({
+      where: eq(googleWorkspaceOrder.id, workspaceOrderId)
+    });
+    if (!order) throw new Error("Order not found");
+
+    const { suspendWorkspace } = await import("../infrastructure/gworkspace-provider");
+    const res = await suspendWorkspace(order.rcOrderId);
+    if (res.success) {
+      await db.update(googleWorkspaceOrder)
+        .set({ status: "suspended", updatedAt: new Date() })
+        .where(eq(googleWorkspaceOrder.id, workspaceOrderId));
+      revalidatePath("/mailboxes/google");
+    }
+    return res;
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : "Suspension failed" };
+  }
+}
+
+/**
+ * Unsuspend workspace order action
+ */
+export async function unsuspendWorkspaceAction(workspaceOrderId: string) {
+  try {
+    const order = await db.query.googleWorkspaceOrder.findFirst({
+      where: eq(googleWorkspaceOrder.id, workspaceOrderId)
+    });
+    if (!order) throw new Error("Order not found");
+
+    const { unsuspendWorkspace } = await import("../infrastructure/gworkspace-provider");
+    const res = await unsuspendWorkspace(order.rcOrderId);
+    if (res.success) {
+      await db.update(googleWorkspaceOrder)
+        .set({ status: "active", updatedAt: new Date() })
+        .where(eq(googleWorkspaceOrder.id, workspaceOrderId));
+      revalidatePath("/mailboxes/google");
+    }
+    return res;
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : "Unsuspension failed" };
+  }
+}
+
+/**
+ * Delete (Cancel) workspace order action
+ */
+export async function deleteWorkspaceAction(workspaceOrderId: string) {
+  try {
+    const order = await db.query.googleWorkspaceOrder.findFirst({
+      where: eq(googleWorkspaceOrder.id, workspaceOrderId)
+    });
+    if (!order) throw new Error("Order not found");
+
+    const { deleteWorkspace } = await import("../infrastructure/gworkspace-provider");
+    const res = await deleteWorkspace(order.rcOrderId);
+    if (res.success) {
+      await db.update(googleWorkspaceOrder)
+        .set({ status: "deleted", updatedAt: new Date() })
+        .where(eq(googleWorkspaceOrder.id, workspaceOrderId));
+      
+      // Mark all mailboxes as deleted
+      await db.update(googleWorkspaceMailbox)
+        .set({ status: "deleted", updatedAt: new Date() })
+        .where(eq(googleWorkspaceMailbox.workspaceOrderId, workspaceOrderId));
+
+      revalidatePath("/mailboxes/google");
+    }
+    return res;
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : "Deletion failed" };
+  }
+}
+
+/**
+ * Delete a specific mailbox user action
+ */
+export async function deleteWorkspaceMailboxAction(mailboxId: string) {
+  try {
+    const mailbox = await db.query.googleWorkspaceMailbox.findFirst({
+      where: eq(googleWorkspaceMailbox.id, mailboxId),
+      with: {
+        order: true
+      }
+    });
+
+    if (!mailbox || !mailbox.order) throw new Error("Mailbox not found");
+
+    const { deleteMailboxUser } = await import("../infrastructure/gworkspace-provider");
+    const res = await deleteMailboxUser(mailbox.order.domainName, mailbox.username);
+    
+    if (res.success) {
+      await db.update(googleWorkspaceMailbox)
+        .set({ status: "deleted", updatedAt: new Date() })
+        .where(eq(googleWorkspaceMailbox.id, mailboxId));
+      
+      revalidatePath("/mailboxes/google");
+    }
+    return res;
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : "User deletion failed" };
+  }
+}
+
+/**
+ * Get Google Workspace DNS records action
+ */
+export async function getWorkspaceDnsRecordsAction(workspaceOrderId: string) {
+  try {
+    const order = await db.query.googleWorkspaceOrder.findFirst({
+      where: eq(googleWorkspaceOrder.id, workspaceOrderId)
+    });
+    if (!order) throw new Error("Order not found");
+
+    const { getWorkspaceDnsRecords } = await import("../infrastructure/gworkspace-provider");
+    return await getWorkspaceDnsRecords(order.domainName);
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : "Failed to fetch DNS records" };
+  }
+}
+
+/**
+ * Get Google Workspace transfer token/details
+ * Note: RC API usually provides this via the details or a specific transfer context
+ */
+export async function getWorkspaceTransferDetailsAction(workspaceOrderId: string): Promise<{
+  success: boolean;
+  transferToken?: string;
+  details?: Record<string, unknown>;
+  error?: string;
+}> {
+  try {
+    const order = await db.query.googleWorkspaceOrder.findFirst({
+      where: eq(googleWorkspaceOrder.id, workspaceOrderId)
+    });
+    if (!order) throw new Error("Order not found");
+
+    const { getWorkspaceDetails } = await import("../infrastructure/gworkspace-provider");
+    const res = await getWorkspaceDetails(order.rcOrderId);
+    
+    if (res.success && res.details) {
+      // In ResellerClub, transfer token is often 'transfer_token' or 'customer_token' in details
+      const details = res.details as unknown as Record<string, unknown>;
+      return {
+        success: true,
+        transferToken: (details.transfer_token || details.customer_token || "Consult ResellerClub Panel") as string,
+        details: details
+      };
+    }
+    return {
+      success: false,
+      error: res.error || "Failed to fetch details"
+    };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : "Failed to fetch transfer details" };
+  }
+}
+
+/**
+ * Reduce the number of licenses (accounts) for a workspace
+ */
+export async function deleteWorkspaceAccountsAction(
+  workspaceOrderId: string,
+  noOfAccounts: number
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const session = await auth.api.getSession({
+      headers: await headers()
+    });
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    const order = await db.query.googleWorkspaceOrder.findFirst({
+      where: eq(googleWorkspaceOrder.id, workspaceOrderId)
+    });
+    if (!order || order.userId !== session.user.id) {
+      throw new Error("Workspace order not found");
+    }
+
+    const { deleteWorkspaceAccounts } = await import("../infrastructure/gworkspace-provider");
+    const res = await deleteWorkspaceAccounts(order.rcOrderId, noOfAccounts);
+
+    if (res.success) {
+      // Update local count
+      const newCount = Math.max(0, order.numberOfAccounts - noOfAccounts);
+      await db.update(googleWorkspaceOrder)
+        .set({ numberOfAccounts: newCount, updatedAt: new Date() })
+        .where(eq(googleWorkspaceOrder.id, workspaceOrderId));
+
+      revalidatePath("/mailboxes/google");
+      return { success: true };
+    }
+
+    return { success: false, error: res.error || "Failed to reduce licenses" };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : "License reduction error" };
   }
 }

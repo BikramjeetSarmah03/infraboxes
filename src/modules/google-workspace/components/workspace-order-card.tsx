@@ -17,18 +17,30 @@ import {
   ChevronDown,
   ChevronUp,
   RefreshCcw,
-  Settings,
   Download,
   Plus,
+  Minus,
+  Power,
+  RotateCw,
+  Trash2,
+  Key,
+  ShieldAlert,
 } from "lucide-react";
 import { format } from "date-fns";
 import { 
   syncWorkspaceOrderDetails, 
   getAllOrderCredentials,
-  addWorkspaceLicensesAction
+  addWorkspaceLicensesAction,
+  deleteWorkspaceAccountsAction,
+  renewWorkspaceAction,
+  suspendWorkspaceAction,
+  unsuspendWorkspaceAction,
+  deleteWorkspaceAction,
+  getWorkspaceTransferDetailsAction
 } from "../actions/gworkspace-actions";
 import { toast } from "sonner";
 import { AddLicensesDialog } from "./add-licenses-dialog";
+import { ReduceLicensesDialog } from "./reduce-licenses-dialog";
 
 import { cn } from "@/lib/utils";
 
@@ -42,6 +54,7 @@ export function WorkspaceOrderCard({ order, onConfigureAdmin, onAddMailbox }: Wo
   const [isExpanded, setIsExpanded] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isAddingLicenses, setIsAddingLicenses] = useState(false);
+  const [isReducingLicenses, setIsReducingLicenses] = useState(false);
 
   const handleSync = async () => {
     setIsSyncing(true);
@@ -79,6 +92,49 @@ export function WorkspaceOrderCard({ order, onConfigureAdmin, onAddMailbox }: Wo
     URL.revokeObjectURL(url);
     
     toast.success("Credentials exported successfully");
+  };
+
+  const handleRenew = async () => {
+    if (!confirm("Are you sure you want to renew this Workspace for 12 months?")) return;
+    toast.promise(renewWorkspaceAction(order.id), {
+      loading: "Renewing workspace...",
+      success: "Workspace renewed successfully",
+      error: (err) => err.message || "Renewal failed"
+    });
+  };
+
+  const handleSuspend = async () => {
+    const isActive = order.status !== "suspended";
+    const action = isActive ? suspendWorkspaceAction : unsuspendWorkspaceAction;
+    const label = isActive ? "Suspend" : "Unsuspend";
+
+    if (!confirm(`Are you sure you want to ${label.toLowerCase()} this workspace?`)) return;
+
+    toast.promise(action(order.id), {
+      loading: `${label}ing workspace...`,
+      success: `Workspace ${isActive ? "suspended" : "activated"} successfully`,
+      error: (err) => err.message || `${label} failed`
+    });
+  };
+
+  const handleDelete = async () => {
+    if (!confirm("CRITICAL: This will PERMANENTLY delete your Google Workspace order. Are you sure?")) return;
+    if (!confirm("This action cannot be undone. All mailboxes will be lost. Proceed?")) return;
+
+    toast.promise(deleteWorkspaceAction(order.id), {
+      loading: "Deleting workspace...",
+      success: "Workspace deleted successfully",
+      error: (err) => err.message || "Deletion failed"
+    });
+  };
+
+  const handleFetchTransferToken = async () => {
+    const res = await getWorkspaceTransferDetailsAction(order.id);
+    if (res.success && "transferToken" in res) {
+      alert(`Transfer Token: ${res.transferToken}\n\nUse this to transfer your Workspace if needed.`);
+    } else {
+      toast.error((res as { error?: string }).error || "Failed to fetch transfer details");
+    }
   };
 
   const statusColors: Record<string, string> = {
@@ -177,6 +233,52 @@ export function WorkspaceOrderCard({ order, onConfigureAdmin, onAddMailbox }: Wo
               >
                 <Plus className="size-4.5" />
               </Button>
+
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-10 rounded-xl text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all duration-300"
+                onClick={() => setIsReducingLicenses(true)}
+                title="Reduce Seats"
+                disabled={order.numberOfAccounts <= order.mailboxes.length}
+              >
+                <Minus className="size-4.5" />
+              </Button>
+
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-10 rounded-xl text-zinc-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10 transition-all duration-300"
+                onClick={handleRenew}
+                title="Renew (1 Year)"
+              >
+                <RotateCw className="size-4.5" />
+              </Button>
+
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  "size-10 rounded-xl transition-all duration-300",
+                  order.status === "suspended" 
+                    ? "text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10" 
+                    : "text-zinc-400 hover:text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-500/10"
+                )}
+                onClick={handleSuspend}
+                title={order.status === "suspended" ? "Unsuspend" : "Suspend"}
+              >
+                <Power className="size-4.5" />
+              </Button>
+
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-10 rounded-xl text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all duration-300"
+                onClick={handleDelete}
+                title="Cancel/Delete Workspace"
+              >
+                <Trash2 className="size-4.5" />
+              </Button>
             </div>
 
             <Button
@@ -225,14 +327,20 @@ export function WorkspaceOrderCard({ order, onConfigureAdmin, onAddMailbox }: Wo
             </div>
           </div>
 
-          <Button
-            variant="link"
-            className="h-auto p-0 text-blue-500 font-bold text-xs gap-1"
-          >
-            <Settings className="size-3" />
-            Workspace Settings
-          </Button>
-        </div>
+            <Button
+              variant="link"
+              className="h-auto p-0 text-blue-500 font-bold text-xs gap-1"
+              onClick={handleFetchTransferToken}
+            >
+              <Key className="size-3" />
+              Get Transfer Token
+            </Button>
+            <div className="h-1 w-1 rounded-full bg-zinc-300 dark:bg-zinc-700 mx-2" />
+            <div className="flex items-center gap-1 text-xs font-bold text-emerald-500">
+              <ShieldAlert className="size-3" />
+              DNS Secured
+            </div>
+          </div>
       </CardHeader>
 
       {isExpanded && (
@@ -262,6 +370,15 @@ export function WorkspaceOrderCard({ order, onConfigureAdmin, onAddMailbox }: Wo
         onClose={() => setIsAddingLicenses(false)}
         workspaceOrderId={order.id}
         domainName={order.domainName}
+      />
+
+      <ReduceLicensesDialog 
+        isOpen={isReducingLicenses}
+        onClose={() => setIsReducingLicenses(false)}
+        workspaceOrderId={order.id}
+        domainName={order.domainName}
+        currentCount={order.numberOfAccounts}
+        activeMailboxes={order.mailboxes.length}
       />
     </Card>
   );

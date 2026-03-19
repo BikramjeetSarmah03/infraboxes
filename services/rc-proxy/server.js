@@ -1038,6 +1038,7 @@ app.post("/googleapps/admin/add", requireAuth, async (req, res) => {
     customerName,
     company,
     zip,
+    domainName,
   } = req.body ?? {};
 
   const actualOrderId =
@@ -1074,19 +1075,14 @@ app.post("/googleapps/admin/add", requireAuth, async (req, res) => {
   params.append("auth-userid", RESELLERCLUB_AUTH_USER_ID);
   params.append("api-key", RESELLERCLUB_API_KEY);
   
-  // Send all possible variations to be extremely safe
   const idStr = String(actualOrderId || 0);
   params.append("order-id", idStr);
   params.append("entity-id", idStr);
-  params.append("entityId", idStr);
-  params.append("entityid", idStr);
-  params.append("orderid", idStr);
   
-  const logParams = new URLSearchParams(params);
-  logParams.set("auth-userid", "[REDACTED]");
-  logParams.set("api-key", "[REDACTED]");
-  console.log(`[proxy] /googleapps/admin/add: Redacted Params Body=`, logParams.toString());
-  
+  if (domainName) {
+    params.append("domain-name", domainName);
+  }
+
   params.append("email-address", emailAddress);
   params.append("first-name", firstName);
   params.append("last-name", lastName);
@@ -1138,6 +1134,67 @@ app.post("/googleapps/admin/add", requireAuth, async (req, res) => {
  *
  * ResellerClub API: https://httpapi.com/api/gapps/in/search.json
  */
+// Delete accounts (license reduction)
+app.post("/googleapps/delete-account", requireAuth, async (req, res) => {
+  const { orderId, noOfAccounts } = req.body ?? {};
+  
+  if (!orderId) return res.status(400).json({ error: "Missing orderId" });
+  if (!noOfAccounts) return res.status(400).json({ error: "Missing noOfAccounts" });
+
+  if (!RESELLERCLUB_AUTH_USER_ID || !RESELLERCLUB_API_KEY) {
+    return res.status(500).json({ error: "Missing ResellerClub credentials" });
+  }
+
+  const params = new URLSearchParams();
+  params.append("auth-userid", RESELLERCLUB_AUTH_USER_ID);
+  params.append("api-key", RESELLERCLUB_API_KEY);
+  params.append("order-id", orderId);
+  params.append("no-of-accounts", noOfAccounts);
+
+  const apiUrl = `${RC_BASE_URL}/gapps/in/delete-account.json`;
+  
+  try {
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      body: params,
+    });
+    const result = await response.json();
+    res.status(response.status).json(result);
+  } catch (error) {
+    console.error(`[proxy] /googleapps/delete-account error:`, error);
+    res.status(500).json({ error: "Failed to delete accounts" });
+  }
+});
+
+// Get Order ID from domain name
+app.get("/googleapps/order-id", requireAuth, async (req, res) => {
+  const { domainName } = req.query;
+  
+  if (!domainName) return res.status(400).json({ error: "Missing domainName" });
+
+  if (!RESELLERCLUB_AUTH_USER_ID || !RESELLERCLUB_API_KEY) {
+    return res.status(500).json({ error: "Missing ResellerClub credentials" });
+  }
+
+  const params = new URLSearchParams({
+    "auth-userid": RESELLERCLUB_AUTH_USER_ID,
+    "api-key": RESELLERCLUB_API_KEY,
+    "domain-name": domainName,
+  });
+
+  const apiUrl = `${RC_BASE_URL}/gapps/in/orderid.json?${params.toString()}`;
+  
+  try {
+    const response = await fetch(apiUrl);
+    const result = await response.json();
+    // Result is directly the OrderID (integer) or {status: 'ERROR', message: '...'}
+    res.status(response.status).json(result);
+  } catch (error) {
+    console.error(`[proxy] /googleapps/order-id error:`, error);
+    res.status(500).json({ error: "Failed to fetch order ID" });
+  }
+});
+
 app.get("/googleapps/search", requireAuth, async (req, res) => {
   const { domainName, customerId, status } = req.query ?? {};
   const noOfRecords = Number.parseInt(req.query["no-of-records"] ?? "10", 10);
