@@ -1022,6 +1022,33 @@ app.get("/googleapps/details", requireAuth, async (req, res) => {
 });
 
 /**
+ * GSuite Details (India Region)
+ */
+app.get("/googleapps/in/details", requireAuth, async (req, res) => {
+  const orderId = req.query["order-id"];
+
+  if (!orderId) {
+    return res.status(400).json({ error: "order-id is required" });
+  }
+
+  const params = new URLSearchParams();
+  params.append("auth-userid", RESELLERCLUB_AUTH_USER_ID);
+  params.append("api-key", RESELLERCLUB_API_KEY);
+  params.append("order-id", String(orderId));
+
+  const url = `${RC_BASE_URL}/gapps/in/details.json?${params.toString()}`;
+  logOutgoingRequest(url, "GET");
+
+  try {
+    const response = await fetch(url, { method: "GET", headers: UPSTREAM_HEADERS });
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (error) {
+    res.status(502).json({ error: "Failed to reach ResellerClub" });
+  }
+});
+
+/**
  * Add admin account for a Google Workspace order
  * POST /googleapps/admin/add
  * Body: { orderId, emailAddress, firstName, lastName, alternateEmailAddress, customerName, company, zip }
@@ -1077,19 +1104,17 @@ app.post("/googleapps/admin/add", requireAuth, async (req, res) => {
   
   const idStr = String(actualOrderId || 0);
   params.append("order-id", idStr);
-  params.append("entity-id", idStr);
   
-  if (domainName) {
-    params.append("domain-name", domainName);
-  }
-
   params.append("email-address", emailAddress);
   params.append("first-name", firstName);
   params.append("last-name", lastName);
-  params.append(
-    "alternate-email-address",
-    alternateEmailAddress || emailAddress,
-  );
+  
+  // ResellerClub often requires alternate email to be DIFFERENT from the primary email
+  const finalAlternateEmail = alternateEmailAddress && alternateEmailAddress !== emailAddress 
+    ? alternateEmailAddress 
+    : `backup-${firstName.toLowerCase()}@sellbotic.org`; // Fallback to a different domain if same
+
+  params.append("alternate-email-address", finalAlternateEmail);
   params.append("name", customerName || `${firstName} ${lastName}`);
   params.append("company", company || `${firstName} ${lastName}`);
   params.append("zip", zip || "00000");
