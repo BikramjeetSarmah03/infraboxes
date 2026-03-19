@@ -31,6 +31,34 @@ const COMMON_HEADERS = {
 };
 
 /**
+ * Robust helper to parse ResellerClub responses (handle JSON, XML, strings)
+ */
+async function parseResellerClubResponse(response: Response): Promise<any> {
+  const text = await response.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    // Check for success markers in plain text or XML
+    if (response.ok && (text.includes("Success") || text.includes("<status>Success</status>") || text.includes("<status>true</status>"))) {
+      return { status: "Success", success: true };
+    }
+    
+    // Handle XML error messages
+    const msgMatch = text.match(/<message>(.*)<\/message>/);
+    if (msgMatch) {
+      return { status: "ERROR", message: msgMatch[1] };
+    }
+
+    // Handle raw numbers (like orderId)
+    if (text && !Number.isNaN(Number(text.trim()))) {
+      return text.trim();
+    }
+
+    return { status: "ERROR", message: text.slice(0, 200) || "Invalid response format" };
+  }
+}
+
+/**
  * Order Google Workspace for a domain
  */
 export async function orderWorkspace(
@@ -79,7 +107,7 @@ export async function orderWorkspace(
       });
     }
 
-    const result = await response.json();
+    const result = await parseResellerClubResponse(response);
 
     if (response.ok && (result.status === "Success" || result.entityid)) {
       return {
@@ -158,7 +186,30 @@ export async function setupWorkspaceAdmin(
       });
     }
 
-    const result = await response.json();
+    const text = await response.text();
+    let result: any = {};
+    try {
+      result = JSON.parse(text);
+    } catch {
+      // If setup returns XML or plain text Success, we check the string
+      if (response.ok && (text.includes("Success") || text.includes("<status>Success</status>"))) {
+        return { success: true };
+      }
+      
+      // Handle the case where they return XML but it's an error
+      if (text.includes("Invalid Order ID") || text.includes("message>")) {
+        const msgMatch = text.match(/<message>(.*)<\/message>/);
+        return {
+          success: false,
+          error: msgMatch ? msgMatch[1] : "Admin setup failed (invalid format)",
+        };
+      }
+
+      return {
+        success: false,
+        error: text.slice(0, 200) || "Admin setup failed (invalid format)",
+      };
+    }
 
     if (response.ok && result.status === "Success") {
       return { 
@@ -225,7 +276,7 @@ export async function addMailboxUser(
       });
     }
 
-    const result = await response.json();
+    const result = await parseResellerClubResponse(response);
 
     if (response.ok && result.status === "Success") {
       return { 
@@ -279,7 +330,7 @@ export async function getWorkspaceDetails(
       response = await fetch(url, { headers: COMMON_HEADERS });
     }
 
-    const result = await response.json();
+    const result = await parseResellerClubResponse(response);
 
     if (response.ok && result.orderid) {
       return { success: true, details: result };
@@ -343,7 +394,7 @@ export async function searchWorkspaceOrders(
       response = await fetch(url, { headers: COMMON_HEADERS });
     }
 
-    const result = await response.json();
+    const result = await parseResellerClubResponse(response);
     console.log(`[gworkspace] searchWorkspaceOrders for ${params.domainName || params.customerId} raw result:`, JSON.stringify(result).slice(0, 500));
 
     if (response.ok) {
@@ -415,7 +466,7 @@ export async function addWorkspaceAccounts(
       });
     }
 
-    const result = await response.json();
+    const result = await parseResellerClubResponse(response);
 
     if (response.ok && (result.status === "Success" || result.actionid)) {
       return { success: true };
@@ -469,7 +520,7 @@ export async function renewWorkspace(
       response = await fetch(url, { method: "POST", headers: COMMON_HEADERS });
     }
 
-    const result = await response.json();
+    const result = await parseResellerClubResponse(response);
     if (response.ok && (result.status === "Success" || result.actionid)) {
       return { success: true };
     }
@@ -510,7 +561,7 @@ export async function suspendWorkspace(
       response = await fetch(url, { method: "POST", headers: COMMON_HEADERS });
     }
 
-    const result = await response.json();
+    const result = await parseResellerClubResponse(response);
     return response.ok && result.status === "Success" 
       ? { success: true }
       : { success: false, error: result.message || "Suspension failed" };
@@ -548,7 +599,7 @@ export async function unsuspendWorkspace(
       response = await fetch(url, { method: "POST", headers: COMMON_HEADERS });
     }
 
-    const result = await response.json();
+    const result = await parseResellerClubResponse(response);
     return response.ok && result.status === "Success" 
       ? { success: true }
       : { success: false, error: result.message || "Unsuspension failed" };
@@ -586,7 +637,7 @@ export async function deleteWorkspace(
       response = await fetch(url, { method: "POST", headers: COMMON_HEADERS });
     }
 
-    const result = await response.json();
+    const result = await parseResellerClubResponse(response);
     return response.ok && result.status === "Success" 
       ? { success: true }
       : { success: false, error: result.message || "Deletion failed" };
@@ -622,7 +673,16 @@ export async function getWorkspaceDnsRecords(
       response = await fetch(url, { method: "GET", headers: COMMON_HEADERS });
     }
 
-    const result = await response.json();
+    const text = await response.text();
+    let result: any = [];
+    try {
+      result = JSON.parse(text);
+    } catch {
+      // If HTML/XML/Text returned, try to find a message but return empty list for records
+      if (response.ok) return { success: true, records: [] };
+      return { success: false, error: "Failed to parse DNS records response" };
+    }
+
     return response.ok 
       ? { success: true, records: result }
       : { success: false, error: result.message || "Failed to fetch DNS records" };
@@ -660,8 +720,18 @@ export async function activateFreeEmail(
       response = await fetch(url, { method: "POST", headers: COMMON_HEADERS });
     }
 
-    const result = await response.json();
-    return response.ok && result.status === "Success"
+    const text = await response.text();
+    let result: any = {};
+    try {
+      result = JSON.parse(text);
+    } catch {
+      if (response.ok && (text.includes("Success") || text.includes("<status>Success</status>"))) {
+        return { success: true };
+      }
+      return { success: false, error: text.slice(0, 100) || "Activation failed" };
+    }
+
+    return response.ok && (result.status === "Success" || result.status === true)
       ? { success: true }
       : { success: false, error: result.message || "Activation failed" };
   } catch (error) {
@@ -700,8 +770,18 @@ export async function deleteMailboxUser(
       response = await fetch(url, { method: "POST", headers: COMMON_HEADERS });
     }
 
-    const result = await response.json();
-    return response.ok && result.status === "Success" 
+    const text = await response.text();
+    let result: any = {};
+    try {
+      result = JSON.parse(text);
+    } catch {
+      if (response.ok && (text.includes("Success") || text.includes("<status>Success</status>"))) {
+        return { success: true };
+      }
+      return { success: false, error: text.slice(0, 100) || "User deletion failed" };
+    }
+
+    return response.ok && (result.status === "Success" || result.status === true)
       ? { success: true }
       : { success: false, error: result.message || "User deletion failed" };
   } catch (error) {
@@ -740,8 +820,18 @@ export async function deleteWorkspaceAccounts(
       response = await fetch(url, { method: "POST", headers: COMMON_HEADERS });
     }
 
-    const result = await response.json();
-    return response.ok 
+    const text = await response.text();
+    let result: any = {};
+    try {
+      result = JSON.parse(text);
+    } catch {
+      if (response.ok && (text.includes("Success") || text.includes("<status>Success</status>"))) {
+        return { success: true };
+      }
+      return { success: false, error: text.slice(0, 100) || "License reduction failed" };
+    }
+
+    return response.ok && (result.status === "Success" || result.status === true)
       ? { success: true }
       : { success: false, error: result.message || "License reduction failed" };
   } catch (error) {
@@ -776,7 +866,22 @@ export async function getGSuiteOrderId(
       response = await fetch(url, { method: "GET", headers: COMMON_HEADERS });
     }
 
-    const result = await response.json();
+    const text = await response.text();
+    let result: any = {};
+    try {
+      result = JSON.parse(text);
+    } catch {
+      // If it's a raw number as string/text
+      if (typeof text === "string" && !Number.isNaN(Number(text.trim()))) {
+        return { success: true, orderId: text.trim().toString() };
+      }
+      // If it's XML holding an orderid
+      const idMatch = text.match(/<orderid>(.*)<\/orderid>/);
+      if (idMatch) return { success: true, orderId: idMatch[1] };
+
+      return { success: false, error: text.slice(0, 100) || "Failed to fetch Order ID" };
+    }
+
     // Result might be just the number or an error object
     if (typeof result === "number" || (typeof result === "string" && !Number.isNaN(Number(result)))) {
       return { success: true, orderId: result.toString() };
