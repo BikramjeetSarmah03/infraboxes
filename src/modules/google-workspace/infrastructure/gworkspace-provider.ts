@@ -31,6 +31,86 @@ const COMMON_HEADERS = {
 };
 
 /**
+ * Get full details of a GSuite order
+ */
+export async function getWorkspaceOrderDetails(
+  rcOrderId: string
+): Promise<{ success: boolean; details?: RCWorkspaceOrderDetails; error?: string }> {
+  try {
+    let response: Response;
+
+    if (config.proxyUrl && config.proxyToken) {
+      const url = `${config.proxyUrl}/googleapps/details?order-id=${rcOrderId}`;
+      response = await fetch(url, {
+        headers: { Authorization: `Bearer ${config.proxyToken}` },
+      });
+    } else {
+      const params = new URLSearchParams({
+        "auth-userid": config.authUserId,
+        "api-key": config.apiKey,
+        "order-id": rcOrderId,
+      });
+      const url = `${BASE_URL}/gapps/details.json?${params.toString()}`;
+      response = await fetch(url, { headers: COMMON_HEADERS });
+    }
+
+    const result = await parseResellerClubResponse(response);
+    if (response.ok && result && !result.message) {
+      return { success: true, details: result };
+    }
+    return { success: false, error: result.message || "Failed to fetch details" };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+/**
+ * Search for accounts in a GSuite order
+ */
+export async function searchWorkspaceAccounts(
+  rcOrderId: string,
+  query?: string
+): Promise<{ success: boolean; accounts: any[]; error?: string }> {
+  try {
+    let response: Response;
+
+    if (config.proxyUrl && config.proxyToken) {
+      const url = new URL(`${config.proxyUrl}/googleapps/search`);
+      url.searchParams.append("order-id", rcOrderId);
+      if (query) url.searchParams.append("query", query);
+      
+      response = await fetch(url.toString(), {
+        headers: { Authorization: `Bearer ${config.proxyToken}` },
+      });
+    } else {
+      const params = new URLSearchParams({
+        "auth-userid": config.authUserId,
+        "api-key": config.apiKey,
+        "order-id": rcOrderId,
+      });
+      if (query) params.append("query", query);
+      const url = `${BASE_URL}/google/search.json?${params.toString()}`;
+      response = await fetch(url, { headers: COMMON_HEADERS });
+    }
+
+    const result = await parseResellerClubResponse(response);
+    if (response.ok && Array.isArray(result)) {
+      return { success: true, accounts: result };
+    }
+    return { success: false, accounts: [], error: result.message || "Failed to search accounts" };
+  } catch (error) {
+    return {
+      success: false,
+      accounts: [],
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+/**
  * Robust helper to parse ResellerClub responses (handle JSON, XML, strings)
  */
 async function parseResellerClubResponse(response: Response): Promise<any> {
@@ -734,23 +814,25 @@ export async function activateFreeEmail(
         body: JSON.stringify({ orderId: rcOrderId }),
       });
     } else {
+      // Fallback to direct if no proxy, but proxy is preferred since it has the trial loops
       const params = new URLSearchParams({
         "auth-userid": config.authUserId,
         "api-key": config.apiKey,
         "order-id": rcOrderId,
       });
-      const url = `${BASE_URL}/mail/activate.json?${params.toString()}`;
+      const url = `${BASE_URL}/mail/activate.xml?${params.toString()}`;
       response = await fetch(url, { method: "POST", headers: COMMON_HEADERS });
     }
 
     const text = await response.text();
+    if (response.ok && (text.includes("Success") || text.includes("<status>Success</status>") || text.includes("<status>true</status>"))) {
+      return { success: true };
+    }
+
     let result: any = {};
     try {
       result = JSON.parse(text);
     } catch {
-      if (response.ok && (text.includes("Success") || text.includes("<status>Success</status>"))) {
-        return { success: true };
-      }
       return { success: false, error: text.slice(0, 100) || "Activation failed" };
     }
 

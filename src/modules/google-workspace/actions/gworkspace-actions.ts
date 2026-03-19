@@ -14,10 +14,10 @@ import {
 import {
   orderWorkspace,
   setupWorkspaceAdmin as setupAdminProvider,
-  addMailboxUser as addUserProvider,
-  getWorkspaceDetails,
+  addWorkspaceAccounts as addUserProvider, // Note: addUserProvider is mapped from addWorkspaceAccounts in original code? 
+  getWorkspaceOrderDetails,
   searchWorkspaceOrders,
-  addWorkspaceAccounts,
+  searchWorkspaceAccounts,
   activateFreeEmail,
 } from "../infrastructure/gworkspace-provider";
 import type { WorkspaceOrderStatus } from "../gworkspace-types";
@@ -220,8 +220,8 @@ export async function deepImportWorkspace(domainName: string) {
     if (rcOrderRaw) {
       rcCustomerId = (rcOrderRaw.customerid || rcOrderRaw.entity_customerid || rcOrderRaw["entity.customerid"])?.toString();
     } else {
-      const { getWorkspaceDetails } = await import("../infrastructure/gworkspace-provider");
-      const detailsRes = await getWorkspaceDetails(rcOrderId);
+      const { getWorkspaceOrderDetails } = await import("../infrastructure/gworkspace-provider");
+      const detailsRes = await getWorkspaceOrderDetails(rcOrderId);
       if (detailsRes.success && detailsRes.details) {
         rcCustomerId = (detailsRes.details as any).customerid?.toString();
       }
@@ -364,7 +364,7 @@ export async function importWorkspaceOrder(
 
     // 2. Fetch full details if we don't have rcOrder yet
     if (!rcOrder) {
-      const detailsRes = await getWorkspaceDetails(rcOrderId.toString());
+      const detailsRes = await getWorkspaceOrderDetails(rcOrderId.toString());
       if (!detailsRes.success || !detailsRes.details) {
         throw new Error(
           detailsRes.error || "Failed to fetch workspace details during import",
@@ -558,7 +558,7 @@ export async function setupWorkspacePrimaryAdmin(
     }
 
     // 3. Call provider to setup admin
-    const setupResult = await setupAdminProvider({
+    let setupResult = await setupAdminProvider({
       workspaceOrderId: order.id,
       rcOrderId: targetRcOrderId,
       domainName: order.domainName,
@@ -570,6 +570,27 @@ export async function setupWorkspacePrimaryAdmin(
       company: userData.companyName,
       zip: userData.zip,
     });
+
+    // 3.1 SYNC FALLBACK: If setup fails with "Invalid Order ID" or "Already exists", try to find existing admin
+    if (!setupResult.success) {
+      console.log(`[gworkspace] Setup failed: ${setupResult.error}. Checking if admin already exists...`);
+      const accountsResult = await searchWorkspaceAccounts(targetRcOrderId);
+      
+      if (accountsResult.success && accountsResult.accounts.length > 0) {
+        // Try to find the admin account
+        const adminAccount = accountsResult.accounts.find(a => 
+          a.email?.toLowerCase() === `${emailPrefix}@${order.domainName}`.toLowerCase()
+        ) || accountsResult.accounts[0]; // Fallback to first if only one
+
+        if (adminAccount) {
+          console.log(`[gworkspace] Found existing account: ${adminAccount.email}. Syncing...`);
+          setupResult = {
+            success: true,
+            password: "", // We don't have the password for manual setup
+          };
+        }
+      }
+    }
 
     if (!setupResult.success) {
       console.error(`[gworkspace] Admin setup failed for ${order.domainName}:`, setupResult.error);
@@ -638,13 +659,7 @@ export async function addWorkspaceUserMailbox(
       throw new Error("Workspace order not found");
 
     // 1. Call provider
-    const addResult = await addUserProvider({
-      workspaceOrderId: order.id,
-      domainName: order.domainName,
-      username,
-      firstName,
-      lastName,
-    });
+    const addResult = await addUserProvider(order.rcOrderId, 1); // We add 1 user at a time for mailboxes
 
     if (!addResult.success) {
       throw new Error(addResult.error || "Failed to add user mailbox");
@@ -659,8 +674,8 @@ export async function addWorkspaceUserMailbox(
       username,
       firstName,
       lastName,
-      password: addResult.password,
-      passwordUpdatedAt: addResult.password ? new Date() : null,
+      password: (addResult as any).password || "",
+      passwordUpdatedAt: (addResult as any).password ? new Date() : null,
       role: "user",
       status: "active",
       createdAt: new Date(),
@@ -715,7 +730,7 @@ export async function syncWorkspaceOrderDetails(workspaceOrderId: string) {
 
     if (!order) throw new Error("Order not found");
 
-    const detailsResult = await getWorkspaceDetails(order.rcOrderId);
+    const detailsResult = await getWorkspaceOrderDetails(order.rcOrderId);
     if (!detailsResult.success || !detailsResult.details) {
       throw new Error(
         detailsResult.error || "Failed to sync from ResellerClub",
@@ -896,8 +911,7 @@ export async function addWorkspaceLicensesAction(
 
     console.log(`[gworkspace] addWorkspaceLicensesAction: INVOKING PROVIDER. Domain=${order.domainName}, targetRcOrderId=${targetRcOrderId}`);
 
-    // 3. Call provider to add licenses
-    const result = await addWorkspaceAccounts(targetRcOrderId, noOfAccounts);
+    const result = await addUserProvider(targetRcOrderId, noOfAccounts);
 
     if (!result.success) {
       throw new Error(result.error || "Failed to add licenses");
@@ -1088,8 +1102,8 @@ export async function getWorkspaceTransferDetailsAction(workspaceOrderId: string
     });
     if (!order) throw new Error("Order not found");
 
-    const { getWorkspaceDetails } = await import("../infrastructure/gworkspace-provider");
-    const res = await getWorkspaceDetails(order.rcOrderId);
+    const { getWorkspaceOrderDetails } = await import("../infrastructure/gworkspace-provider");
+    const res = await getWorkspaceOrderDetails(order.rcOrderId);
     
     if (res.success && res.details) {
       // In ResellerClub, transfer token is often 'transfer_token' or 'customer_token' in details

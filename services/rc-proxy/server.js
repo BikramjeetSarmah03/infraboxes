@@ -1655,9 +1655,10 @@ app.post("/googleapps/activate-free-email", requireAuth, async (req, res) => {
   const patterns = [
     `${RC_BASE_URL}/mail/activate.xml`,
     `${RC_BASE_URL}/mail/activate.json`,
-    `${RC_BASE_URL}/mail/in/activate.json`,
-    `${RC_BASE_URL}/mail/se/activate.json`,
-    `${RC_BASE_URL}/freeemail/activate.json`,
+    `${RC_BASE_URL}/mail/in/activate.xml`,
+    `${RC_BASE_URL}/mail/se/activate.xml`,
+    `${RC_BASE_URL}/mail/gbl/activate.xml`,
+    `${RC_BASE_URL}/freeemail/activate.xml`,
   ];
 
   let lastError = null;
@@ -1713,7 +1714,7 @@ app.post("/dns/activate", requireAuth, async (req, res) => {
   params.append("api-key", RESELLERCLUB_API_KEY);
   params.append("order-id", String(actualOrderId));
 
-  const url = `${RC_DNS_URL}/manage/activate.json?${params.toString()}`;
+  const url = `${RC_BASE_URL}/dns/activate.json?${params.toString()}`;
   logOutgoingRequest(url, "POST");
 
   try {

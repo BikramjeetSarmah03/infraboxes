@@ -996,7 +996,7 @@ export async function activateDns(
         "order-id": orderId,
       });
 
-      const url = `${BASE_URL}/dns/manage/activate.json?${params.toString()}`;
+      const url = `${BASE_URL}/dns/activate.json?${params.toString()}`;
       response = await fetch(url, {
         method: "POST",
         headers: COMMON_HEADERS,
