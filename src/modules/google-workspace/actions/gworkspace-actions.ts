@@ -568,7 +568,6 @@ export async function setupWorkspacePrimaryAdmin(
     });
 
     if (!setupResult.success) {
-      console.log({ setupResult });
       throw new Error(setupResult.error || "Failed to setup admin account");
     }
 
@@ -602,7 +601,6 @@ export async function setupWorkspacePrimaryAdmin(
     revalidatePath("/mailboxes/google");
     return { success: true };
   } catch (error) {
-    console.log({ error });
     console.error("[gworkspace] setupWorkspacePrimaryAdmin error:", error);
     return {
       success: false,

@@ -193,7 +193,11 @@ export async function setupWorkspaceAdmin(
     } catch {
       // If setup returns XML or plain text Success, we check the string
       if (response.ok && (text.includes("Success") || text.includes("<status>Success</status>"))) {
-        return { success: true };
+        const passMatch = text.match(/<password>(.*)<\/password>/);
+        return { 
+          success: true,
+          password: passMatch ? passMatch[1] : undefined
+        };
       }
       
       // Handle the case where they return XML but it's an error
@@ -395,7 +399,6 @@ export async function searchWorkspaceOrders(
     }
 
     const result = await parseResellerClubResponse(response);
-    console.log(`[gworkspace] searchWorkspaceOrders for ${params.domainName || params.customerId} raw result:`, JSON.stringify(result).slice(0, 500));
 
     if (response.ok) {
       // RC Search API returns { "1": {..}, "2": {..}, "recno": X } or an array

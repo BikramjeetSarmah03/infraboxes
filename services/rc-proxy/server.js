@@ -1122,7 +1122,7 @@ app.post("/googleapps/admin/add", requireAuth, async (req, res) => {
   params.append("company", company || `${firstName} ${lastName}`);
   params.append("zip", zip || "00000");
 
-  const regions = ["in", "gbl", "se"];
+  const regions = ["in", "gbl", "se", "eu", "us"];
   let lastError = null;
   let lastStatus = 502;
 
@@ -1173,7 +1173,6 @@ app.post("/googleapps/admin/add", requireAuth, async (req, res) => {
           }
         }
       } catch (e) {
-        console.log({ errorInAdminAdd: e });
         // If not JSON, but status is 200, assume success unless it's a known error string
         if (
           isSuccess &&
@@ -1490,7 +1489,7 @@ app.post("/googleapps/add-account", requireAuth, async (req, res) => {
  * Generic helper to try GSuite action across regions
  */
 async function tryGSuiteRegions(endpoint, method, params, res) {
-  const regions = ["in", "gbl", "se"];
+  const regions = ["in", "gbl", "se", "eu", "us"];
   let lastError = null;
   let lastStatus = 502;
 
