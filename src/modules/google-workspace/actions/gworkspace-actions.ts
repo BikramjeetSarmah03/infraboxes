@@ -553,6 +553,10 @@ export async function setupWorkspacePrimaryAdmin(
       where: eq(userSchema.id, session.user.id),
     });
 
+    if (!userData?.zip || !userData?.companyName) {
+      throw new Error("Please complete your profile (Zip Code and Company Name) before setting up GSuite.");
+    }
+
     // 3. Call provider to setup admin
     const setupResult = await setupAdminProvider({
       workspaceOrderId: order.id,
@@ -562,12 +566,13 @@ export async function setupWorkspacePrimaryAdmin(
       firstName,
       lastName,
       alternateEmail,
-      customerName: userData?.name || session.user.name,
-      company: userData?.companyName || session.user.name || "Default Company",
-      zip: userData?.zip || "00000",
+      customerName: userData.name || session.user.name || "Customer",
+      company: userData.companyName,
+      zip: userData.zip,
     });
 
     if (!setupResult.success) {
+      console.error(`[gworkspace] Admin setup failed for ${order.domainName}:`, setupResult.error);
       throw new Error(setupResult.error || "Failed to setup admin account");
     }
 

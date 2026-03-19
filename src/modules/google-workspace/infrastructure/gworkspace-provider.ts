@@ -201,17 +201,18 @@ export async function setupWorkspaceAdmin(
       }
       
       // Handle the case where they return XML but it's an error
-      if (text.includes("Invalid Order ID") || text.includes("message>")) {
-        const msgMatch = text.match(/<message>(.*)<\/message>/);
+      if (text.includes("message>") || text.includes("<status>ERROR</status>") || text.includes("Invalid Order ID")) {
+        const msgMatch = text.match(/<message>([\s\S]*?)<\/message>/);
+        const errorMsg = msgMatch ? msgMatch[1].trim() : text.trim().slice(0, 500);
         return {
           success: false,
-          error: msgMatch ? msgMatch[1] : "Admin setup failed (invalid format)",
+          error: errorMsg || "Admin setup failed (invalid format)",
         };
       }
 
       return {
         success: false,
-        error: text.slice(0, 200) || "Admin setup failed (invalid format)",
+        error: text.trim().slice(0, 500) || "Admin setup failed (invalid format)",
       };
     }
 
@@ -221,9 +222,28 @@ export async function setupWorkspaceAdmin(
         password: result.password // RC returns this for auto-gen
       };
     } else {
+      const errorMsg = result.message || result.error || "Admin setup failed";
+      
+      // AUTO-RETRY IF INVALID ORDER ID: Maybe the stored ID was wrong?
+      if (errorMsg.toLowerCase().includes("invalid order id")) {
+        console.log(`[gworkspace] Invalid Order ID ${input.rcOrderId} for ${input.domainName}. Searching for correct ID...`);
+        const searchResult = await searchWorkspaceOrders({ domainName: input.domainName });
+        
+        if (searchResult.success && searchResult.orders && searchResult.orders.length > 0) {
+          const actualOrderId = searchResult.orders[0]?.orderId;
+          if (typeof actualOrderId === "string" && actualOrderId !== input.rcOrderId) {
+            console.log(`[gworkspace] Found different Order ID: ${actualOrderId}. Retrying setup...`);
+            return setupWorkspaceAdmin({
+              ...input,
+              rcOrderId: actualOrderId
+            });
+          }
+        }
+      }
+
       return {
         success: false,
-        error: result.message || result.error || "Admin setup failed",
+        error: errorMsg,
       };
     }
   } catch (error) {
