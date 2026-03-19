@@ -1122,7 +1122,7 @@ app.post("/googleapps/admin/add", requireAuth, async (req, res) => {
   params.append("company", company || `${firstName} ${lastName}`);
   params.append("zip", zip || "00000");
 
-  const regions = ["in", "gbl", "se", "eu", "us"];
+  const regions = ["in", "gbl", "se"];
   let lastError = null;
   let lastStatus = 502;
 
@@ -1188,7 +1188,7 @@ app.post("/googleapps/admin/add", requireAuth, async (req, res) => {
         return res.status(200).send(body);
       }
 
-      if (!isRegionalError) {
+      if (!isRegionalError || !lastError || lastError.includes("404")) {
         lastError = body;
         lastStatus = response.status;
       }
@@ -1201,8 +1201,8 @@ app.post("/googleapps/admin/add", requireAuth, async (req, res) => {
 
   // If we're here, all regions failed
   res
-    .status(lastStatus)
-    .send(lastError || "Failed to setup admin account in any region");
+    .status(lastStatus || 500)
+    .send(lastError || "Failed to setup admin account in any valid region (India, Global, SE Asia)");
 });
 
 /**
@@ -1489,7 +1489,7 @@ app.post("/googleapps/add-account", requireAuth, async (req, res) => {
  * Generic helper to try GSuite action across regions
  */
 async function tryGSuiteRegions(endpoint, method, params, res) {
-  const regions = ["in", "gbl", "se", "eu", "us"];
+  const regions = ["in", "gbl", "se"];
   let lastError = null;
   let lastStatus = 502;
 
@@ -1551,7 +1551,7 @@ async function tryGSuiteRegions(endpoint, method, params, res) {
         return res.status(200).send(body);
       }
 
-      if (!isRegionalError) {
+      if (!isRegionalError || !lastError || lastError.includes("404")) {
         lastError = body;
         lastStatus = response.status;
       }
