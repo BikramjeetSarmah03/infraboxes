@@ -1122,7 +1122,7 @@ app.post("/googleapps/admin/add", requireAuth, async (req, res) => {
   params.append("company", company || `${firstName} ${lastName}`);
   params.append("zip", zip || "00000");
 
-  const regions = ["in", "se", "gbl", "eu", "us"];
+  const regions = ["in", "gbl", "se"];
   let lastError = null;
   let lastStatus = 502;
 
@@ -1490,7 +1490,7 @@ app.post("/googleapps/add-account", requireAuth, async (req, res) => {
  * Generic helper to try GSuite action across regions
  */
 async function tryGSuiteRegions(endpoint, method, params, res) {
-  const regions = ["in", "se", "gbl", "eu", "us"];
+  const regions = ["in", "gbl", "se"];
   let lastError = null;
   let lastStatus = 502;
 

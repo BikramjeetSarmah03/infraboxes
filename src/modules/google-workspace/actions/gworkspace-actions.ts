@@ -541,13 +541,17 @@ export async function setupWorkspacePrimaryAdmin(
       console.log(`[gworkspace] setupWorkspacePrimaryAdmin: Activating Free Email for ${targetRcOrderId}`);
       const activationResult = await activateFreeEmail(targetRcOrderId);
       if (!activationResult.success) {
-        // If it's already activated, RC might return an error message, we check if we should proceed anyway
-        console.warn(`[gworkspace] setupWorkspacePrimaryAdmin: Free Email activation result:`, activationResult.error);
-        // We proceed because it might already be active
+        // If it's 404 or already activated, we DON'T stop. We proceed to admin setup.
+        console.warn(`[gworkspace] setupWorkspacePrimaryAdmin: Free Email activation result (proceeding anyway):`, activationResult.error);
       }
     } catch (actError) {
       console.error(`[gworkspace] setupWorkspacePrimaryAdmin: Free Email activation error (ignoring):`, actError);
     }
+
+    // 2.7 Fetch real user profile data for zip/company
+    const userData = await db.query.user.findFirst({
+      where: eq(userSchema.id, session.user.id),
+    });
 
     // 3. Call provider to setup admin
     const setupResult = await setupAdminProvider({
@@ -558,9 +562,9 @@ export async function setupWorkspacePrimaryAdmin(
       firstName,
       lastName,
       alternateEmail,
-      customerName: session.user.name,
-      company: session.user.name || "Default Company",
-      zip: "00000",
+      customerName: userData?.name || session.user.name,
+      company: userData?.companyName || session.user.name || "Default Company",
+      zip: userData?.zip || "00000",
     });
 
     if (!setupResult.success) {
