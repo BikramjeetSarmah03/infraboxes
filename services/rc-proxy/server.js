@@ -930,43 +930,41 @@ app.post("/googleapps/add-user", requireAuth, async (req, res) => {
 
   console.log(`[proxy] /googleapps/add-user: Incoming Body=`, JSON.stringify(req.body));
   
-  const apiUrl = `${RC_BASE_URL}/googleapps/add-user.json`;
-  logOutgoingRequest(apiUrl, "POST");
+  const regions = ["in", "se", "gbl"];
+  let lastError = null;
+  let lastStatus = 502;
 
-  const logParams = new URLSearchParams(params);
-  logParams.set("auth-userid", "[REDACTED]");
-  logParams.set("api-key", "[REDACTED]");
-  console.log(`[proxy] /googleapps/add-user: Redacted Params Body=`, logParams.toString());
+  for (const region of regions) {
+    const apiUrl = `${RC_BASE_URL}/gapps/${region}/add-user.json`;
+    console.log(`[proxy] /googleapps/add-user: Trying region ${region}`);
+    
+    try {
+      const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          ...UPSTREAM_HEADERS,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: params.toString(),
+      });
+      
+      const body = await response.text();
+      const contentType = response.headers.get("content-type");
 
-  try {
-    const response = await fetch(apiUrl, {
-      method: "POST",
-      headers: {
-        ...UPSTREAM_HEADERS,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: params.toString(),
-    });
-    const body = await response.text();
-    const contentType = response.headers.get("content-type");
+      logUpstreamDiagnostics(`/googleapps/add-user (${region})`, response.status, contentType, body);
 
-    // Log diagnostics for suspicious responses (non-JSON or errors)
-    logUpstreamDiagnostics(
-      "/googleapps/add-user",
-      response.status,
-      contentType,
-      body,
-    );
-
-    if (contentType) {
-      res.set("content-type", contentType);
+      if (response.status === 200) {
+        return res.status(200).send(body);
+      }
+      
+      lastError = body;
+      lastStatus = response.status;
+    } catch (error) {
+      lastError = error.message;
     }
-
-    res.status(response.status).send(body);
-  } catch (error) {
-    console.error("[googleapps/add-user] Error:", error);
-    res.status(502).json({ error: "Failed to reach ResellerClub" });
   }
+
+  res.status(lastStatus).send(lastError || "Failed to add user in any region");
 });
 
 /**
@@ -978,74 +976,55 @@ app.get("/googleapps/details", requireAuth, async (req, res) => {
   const orderId = req.query["order-id"];
 
   if (!orderId) {
-    return res
-      .status(400)
-      .json({ error: "order-id query parameter is required" });
+    return res.status(400).json({ error: "order-id query parameter is required" });
   }
 
   if (!RESELLERCLUB_AUTH_USER_ID || !RESELLERCLUB_API_KEY) {
     return res.status(500).json({ error: "Missing ResellerClub credentials" });
   }
 
-  const params = new URLSearchParams();
-  params.append("auth-userid", RESELLERCLUB_AUTH_USER_ID);
-  params.append("api-key", RESELLERCLUB_API_KEY);
-  params.append("order-id", String(orderId));
+  const regions = ["in", "se", "gbl"];
+  let lastError = null;
+  let lastStatus = 404;
 
-  const url = `${RC_BASE_URL}/googleapps/details.json?${params.toString()}`;
-  logOutgoingRequest(url, "GET");
+  for (const region of regions) {
+    const params = new URLSearchParams();
+    params.append("auth-userid", RESELLERCLUB_AUTH_USER_ID);
+    params.append("api-key", RESELLERCLUB_API_KEY);
+    params.append("order-id", String(orderId));
 
-  try {
-    const response = await fetch(url, {
-      method: "GET",
-      headers: UPSTREAM_HEADERS,
-    });
-    const body = await response.text();
-    const contentType = response.headers.get("content-type");
+    const url = `${RC_BASE_URL}/gapps/${region}/details.json?${params.toString()}`;
+    console.log(`[proxy] /googleapps/details: Trying region ${region} - ${url}`);
+    
+    try {
+      const response = await fetch(url, {
+        method: "GET",
+        headers: UPSTREAM_HEADERS,
+      });
+      const body = await response.text();
+      const contentType = response.headers.get("content-type");
 
-    logUpstreamDiagnostics(
-      "/googleapps/details",
-      response.status,
-      contentType,
-      body,
-    );
+      logUpstreamDiagnostics(
+        `/googleapps/details (${region})`,
+        response.status,
+        contentType,
+        body,
+      );
 
-    if (contentType) {
-      res.set("content-type", contentType);
+      if (response.status === 200) {
+        if (contentType) res.set("content-type", contentType);
+        return res.status(200).send(body);
+      }
+      
+      lastError = body;
+      lastStatus = response.status;
+    } catch (error) {
+      console.error(`[googleapps/details] Error in region ${region}:`, error);
+      lastError = error.message;
     }
-
-    res.status(response.status).send(body);
-  } catch (error) {
-    console.error("[googleapps/details] Error:", error);
-    res.status(502).json({ error: "Failed to reach ResellerClub" });
-  }
-});
-
-/**
- * GSuite Details (India Region)
- */
-app.get("/googleapps/in/details", requireAuth, async (req, res) => {
-  const orderId = req.query["order-id"];
-
-  if (!orderId) {
-    return res.status(400).json({ error: "order-id is required" });
   }
 
-  const params = new URLSearchParams();
-  params.append("auth-userid", RESELLERCLUB_AUTH_USER_ID);
-  params.append("api-key", RESELLERCLUB_API_KEY);
-  params.append("order-id", String(orderId));
-
-  const url = `${RC_BASE_URL}/gapps/in/details.json?${params.toString()}`;
-  logOutgoingRequest(url, "GET");
-
-  try {
-    const response = await fetch(url, { method: "GET", headers: UPSTREAM_HEADERS });
-    const data = await response.json();
-    res.status(response.status).json(data);
-  } catch (error) {
-    res.status(502).json({ error: "Failed to reach ResellerClub" });
-  }
+  res.status(lastStatus).send(lastError || "Order not found in any region");
 });
 
 /**
@@ -1119,37 +1098,64 @@ app.post("/googleapps/admin/add", requireAuth, async (req, res) => {
   params.append("company", company || `${firstName} ${lastName}`);
   params.append("zip", zip || "00000");
 
-  const apiUrl = `${RC_BASE_URL}/gapps/in/admin/add.json`;
-  logOutgoingRequest(apiUrl, "POST");
+  const regions = ["in", "se", "gbl"];
+  let lastError = null;
+  let lastStatus = 502;
 
-  try {
-    const response = await fetch(apiUrl, {
-      method: "POST",
-      headers: {
-        ...UPSTREAM_HEADERS,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: params.toString(),
-    });
-    const body = await response.text();
-    const contentType = response.headers.get("content-type");
+  for (const region of regions) {
+    const apiUrl = `${RC_BASE_URL}/gapps/${region}/admin/add.json`;
+    console.log(`[proxy] /googleapps/admin/add: Trying region ${region} - ${apiUrl}`);
+    
+    try {
+      const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          ...UPSTREAM_HEADERS,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: params.toString(),
+      });
+      
+      const body = await response.text();
+      const contentType = response.headers.get("content-type");
 
-    logUpstreamDiagnostics(
-      "/googleapps/admin/add",
-      response.status,
-      contentType,
-      body,
-    );
+      logUpstreamDiagnostics(
+        `/googleapps/admin/add (${region})`,
+        response.status,
+        contentType,
+        body,
+      );
 
-    if (contentType) {
-      res.set("content-type", contentType);
+      // If success or a generic validation error (not a 404 or regional error), return it
+      // ResellerClub returns 404 if the order doesn't exist in that regional bucket
+      // or if the URL is wrong.
+      if (response.status === 200) {
+        if (contentType) res.set("content-type", contentType);
+        return res.status(200).send(body);
+      }
+      
+      // If we got a real error from RC (not just a 404 regional mismatch), save it
+      try {
+        const jsonBody = JSON.parse(body);
+        if (jsonBody.status === "ERROR" && !body.includes("does not exist") && response.status !== 404) {
+           // If it's a domain mismatch error, we might be in the wrong region, so we continue.
+           // But if it's something else, we might want to collect it.
+           lastError = body;
+           lastStatus = response.status;
+        }
+      } catch (e) {
+        lastError = body;
+        lastStatus = response.status;
+      }
+
+    } catch (error) {
+      console.error(`[googleapps/admin/add] Error in region ${region}:`, error);
+      lastError = error.message;
     }
-
-    res.status(response.status).send(body);
-  } catch (error) {
-    console.error("[googleapps/admin/add] Error:", error);
-    res.status(502).json({ error: "Failed to reach ResellerClub" });
   }
+
+  // If we're here, all regions failed
+  res.status(lastStatus).send(lastError || "Failed to setup admin account in any region");
 });
 
 /**
@@ -1173,22 +1179,41 @@ app.post("/googleapps/delete-account", requireAuth, async (req, res) => {
   const params = new URLSearchParams();
   params.append("auth-userid", RESELLERCLUB_AUTH_USER_ID);
   params.append("api-key", RESELLERCLUB_API_KEY);
-  params.append("order-id", orderId);
-  params.append("no-of-accounts", noOfAccounts);
+  const regions = ["in", "se", "gbl"];
+  let lastError = null;
+  let lastStatus = 502;
 
-  const apiUrl = `${RC_BASE_URL}/gapps/in/delete-account.json`;
-  
-  try {
-    const response = await fetch(apiUrl, {
-      method: "POST",
-      body: params,
-    });
-    const result = await response.json();
-    res.status(response.status).json(result);
-  } catch (error) {
-    console.error(`[proxy] /googleapps/delete-account error:`, error);
-    res.status(500).json({ error: "Failed to delete accounts" });
+  for (const region of regions) {
+    const apiUrl = `${RC_BASE_URL}/gapps/${region}/delete-account.json`;
+    console.log(`[proxy] /googleapps/delete-account: Trying region ${region}`);
+    
+    try {
+      const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          ...UPSTREAM_HEADERS,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: params.toString(),
+      });
+      
+      const body = await response.text();
+      const contentType = response.headers.get("content-type");
+
+      logUpstreamDiagnostics(`/googleapps/delete-account (${region})`, response.status, contentType, body);
+
+      if (response.status === 200) {
+        return res.status(200).send(body);
+      }
+      
+      lastError = body;
+      lastStatus = response.status;
+    } catch (error) {
+      lastError = error.message;
+    }
   }
+
+  res.status(lastStatus).send(lastError || "Failed to delete account in any region");
 });
 
 // Get Order ID from domain name
@@ -1201,23 +1226,38 @@ app.get("/googleapps/order-id", requireAuth, async (req, res) => {
     return res.status(500).json({ error: "Missing ResellerClub credentials" });
   }
 
-  const params = new URLSearchParams({
-    "auth-userid": RESELLERCLUB_AUTH_USER_ID,
-    "api-key": RESELLERCLUB_API_KEY,
-    "domain-name": domainName,
-  });
-
-  const apiUrl = `${RC_BASE_URL}/gapps/in/orderid.json?${params.toString()}`;
+  const regions = ["in", "se", "gbl"];
   
-  try {
-    const response = await fetch(apiUrl);
-    const result = await response.json();
-    // Result is directly the OrderID (integer) or {status: 'ERROR', message: '...'}
-    res.status(response.status).json(result);
-  } catch (error) {
-    console.error(`[proxy] /googleapps/order-id error:`, error);
-    res.status(500).json({ error: "Failed to fetch order ID" });
+  for (const region of regions) {
+    const params = new URLSearchParams({
+      "auth-userid": RESELLERCLUB_AUTH_USER_ID,
+      "api-key": RESELLERCLUB_API_KEY,
+      "domain-name": String(domainName),
+    });
+
+    const apiUrl = `${RC_BASE_URL}/gapps/${region}/orderid.json?${params.toString()}`;
+    console.log(`[proxy] /googleapps/order-id: Trying region ${region}`);
+    
+    try {
+      const response = await fetch(apiUrl);
+      const result = await response.json();
+      
+      // If result is a number (string or actual number), it's the order ID
+      if (response.status === 200 && !Number.isNaN(Number(result)) && typeof result !== 'object') {
+        return res.status(200).json(result);
+      }
+      
+      // If result is an object with error, continue to next region
+      if (result.status === "ERROR") {
+        console.log(`[proxy] /googleapps/order-id: Region ${region} failed: ${result.message}`);
+        continue;
+      }
+    } catch (error) {
+      console.error(`[proxy] /googleapps/order-id error in ${region}:`, error);
+    }
   }
+
+  res.status(404).json({ error: "Order ID not found for this domain in any region" });
 });
 
 app.get("/googleapps/search", requireAuth, async (req, res) => {
@@ -1229,39 +1269,45 @@ app.get("/googleapps/search", requireAuth, async (req, res) => {
     return res.status(500).json({ error: "Missing ResellerClub credentials" });
   }
 
-  const params = new URLSearchParams();
-  params.append("auth-userid", RESELLERCLUB_AUTH_USER_ID);
-  params.append("api-key", RESELLERCLUB_API_KEY);
-  params.append("no-of-records", String(noOfRecords));
-  params.append("page-no", String(pageNo));
-  if (domainName) params.append("domain-name", domainName);
-  if (customerId) params.append("customer-id", customerId);
-  if (status) params.append("status", status);
+  const regions = ["in", "se", "gbl"];
+  let combinedResults = [];
+  let totalRecords = 0;
 
-  const url = `${RC_BASE_URL}/gapps/in/search.json?${params.toString()}`;
-  logOutgoingRequest(url, "GET");
+  for (const region of regions) {
+    const params = new URLSearchParams();
+    params.append("auth-userid", RESELLERCLUB_AUTH_USER_ID);
+    params.append("api-key", RESELLERCLUB_API_KEY);
+    params.append("no-of-records", String(noOfRecords));
+    params.append("page-no", String(pageNo));
+    if (domainName) params.append("domain-name", domainName);
+    if (customerId) params.append("customer-id", customerId);
+    if (status) params.append("status", status);
 
-  try {
-    const response = await fetch(url, {
-      method: "GET",
-      headers: UPSTREAM_HEADERS,
-    });
-    const body = await response.text();
-    const contentType = response.headers.get("content-type");
-
-    logUpstreamDiagnostics(
-      "/googleapps/search",
-      response.status,
-      contentType,
-      body,
-    );
-
-    if (contentType) res.set("content-type", contentType);
-    res.status(response.status).send(body);
-  } catch (error) {
-    console.error("[googleapps/search] Error:", error);
-    res.status(502).json({ error: "Failed to reach ResellerClub" });
+    const url = `${RC_BASE_URL}/gapps/${region}/search.json?${params.toString()}`;
+    console.log(`[proxy] /googleapps/search: Trying region ${region}`);
+    
+    try {
+      const response = await fetch(url, { method: "GET", headers: UPSTREAM_HEADERS });
+      const data = await response.json();
+      
+      if (response.status === 200 && Array.isArray(data)) {
+        // Some RC search APIs return an array of results
+        combinedResults = combinedResults.concat(data);
+      } else if (response.status === 200 && data.recid) {
+        // Some return an object with records
+        return res.status(200).json(data);
+      }
+    } catch (error) {
+      console.error(`[proxy] /googleapps/search error in ${region}:`, error);
+    }
   }
+
+  // If we have combined results (for arrays), return them
+  if (combinedResults.length > 0) {
+    return res.status(200).json(combinedResults);
+  }
+
+  res.status(200).json([]); // Return empty if nothing found
 });
 
 /**
@@ -1321,34 +1367,153 @@ app.post("/googleapps/add-account", requireAuth, async (req, res) => {
   params.append("no-of-accounts", String(noOfAccounts));
   params.append("invoice-option", invoiceOption || "NoInvoice");
 
-  const apiUrl = `${RC_BASE_URL}/gapps/in/add-account.json`;
-  logOutgoingRequest(apiUrl, "POST");
+  const regions = ["in", "se", "gbl"];
+  let lastError = null;
+  let lastStatus = 502;
 
-  try {
-    const response = await fetch(apiUrl, {
-      method: "POST",
-      headers: {
-        ...UPSTREAM_HEADERS,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: params.toString(),
-    });
-    const body = await response.text();
-    const contentType = response.headers.get("content-type");
+  for (const region of regions) {
+    const apiUrl = `${RC_BASE_URL}/gapps/${region}/add-account.json`;
+    console.log(`[proxy] /googleapps/add-account: Trying region ${region}`);
+    
+    try {
+      const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          ...UPSTREAM_HEADERS,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: params.toString(),
+      });
+      
+      const body = await response.text();
+      const contentType = response.headers.get("content-type");
 
-    logUpstreamDiagnostics(
-      "/googleapps/add-account",
-      response.status,
-      contentType,
-      body,
-    );
+      logUpstreamDiagnostics(`/googleapps/add-account (${region})`, response.status, contentType, body);
 
-    if (contentType) res.set("content-type", contentType);
-    res.status(response.status).send(body);
-  } catch (error) {
-    console.error("[googleapps/add-account] Error:", error);
-    res.status(502).json({ error: "Failed to reach ResellerClub" });
+      if (response.status === 200) {
+        return res.status(200).send(body);
+      }
+      
+      lastError = body;
+      lastStatus = response.status;
+    } catch (error) {
+      lastError = error.message;
+    }
   }
+
+  res.status(lastStatus).send(lastError || "Failed to add accounts in any region");
+});
+
+/**
+ * Generic helper to try GSuite action across regions
+ */
+async function tryGSuiteRegions(endpoint, method, params, res) {
+  const regions = ["in", "se", "gbl"];
+  let lastError = null;
+  let lastStatus = 502;
+
+  for (const region of regions) {
+    const apiUrl = `${RC_BASE_URL}/gapps/${region}/${endpoint}.json`;
+    console.log(`[proxy] GSuite Action: Trying ${method} ${apiUrl}`);
+    
+    try {
+      const response = await fetch(apiUrl, {
+        method: method,
+        headers: {
+          ...UPSTREAM_HEADERS,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: method === "POST" ? params.toString() : undefined,
+      });
+      
+      const body = await response.text();
+      const contentType = response.headers.get("content-type");
+
+      logUpstreamDiagnostics(`/gapps/${endpoint} (${region})`, response.status, contentType, body);
+
+      if (response.status === 200) {
+        if (contentType) res.set("content-type", contentType);
+        return res.status(200).send(body);
+      }
+      
+      lastError = body;
+      lastStatus = response.status;
+    } catch (error) {
+      lastError = error.message;
+    }
+  }
+
+  res.status(lastStatus).send(lastError || `Failed to perform ${endpoint} in any region`);
+}
+
+/**
+ * Renew GSuite order
+ */
+app.post("/googleapps/renew", requireAuth, async (req, res) => {
+  const { orderId, months } = req.body ?? {};
+  const params = new URLSearchParams({
+    "auth-userid": RESELLERCLUB_AUTH_USER_ID,
+    "api-key": RESELLERCLUB_API_KEY,
+    "order-id": String(orderId),
+    months: String(months || 12),
+    "invoice-option": "NoInvoice",
+  });
+  return tryGSuiteRegions("renew", "POST", params, res);
+});
+
+/**
+ * Suspend GSuite order
+ */
+app.post("/googleapps/suspend", requireAuth, async (req, res) => {
+  const { orderId, reason } = req.body ?? {};
+  const params = new URLSearchParams({
+    "auth-userid": RESELLERCLUB_AUTH_USER_ID,
+    "api-key": RESELLERCLUB_API_KEY,
+    "order-id": String(orderId),
+    reason: reason || "Manual suspension",
+  });
+  return tryGSuiteRegions("suspend", "POST", params, res);
+});
+
+/**
+ * Unsuspend GSuite order
+ */
+app.post("/googleapps/unsuspend", requireAuth, async (req, res) => {
+  const { orderId } = req.body ?? {};
+  const params = new URLSearchParams({
+    "auth-userid": RESELLERCLUB_AUTH_USER_ID,
+    "api-key": RESELLERCLUB_API_KEY,
+    "order-id": String(orderId),
+  });
+  return tryGSuiteRegions("unsuspend", "POST", params, res);
+});
+
+/**
+ * Delete GSuite order
+ */
+app.post("/googleapps/delete", requireAuth, async (req, res) => {
+  const { orderId } = req.body ?? {};
+  const params = new URLSearchParams({
+    "auth-userid": RESELLERCLUB_AUTH_USER_ID,
+    "api-key": RESELLERCLUB_API_KEY,
+    "order-id": String(orderId),
+  });
+  return tryGSuiteRegions("delete", "POST", params, res);
+});
+
+/**
+ * Get GSuite DNS records
+ */
+app.get("/googleapps/dns-records", requireAuth, async (req, res) => {
+  const { orderId } = req.query ?? {};
+  if (!orderId) return res.status(400).json({ error: "Missing orderId" });
+
+  const params = new URLSearchParams({
+    "auth-userid": RESELLERCLUB_AUTH_USER_ID,
+    "api-key": RESELLERCLUB_API_KEY,
+    "order-id": String(orderId),
+  });
+  return tryGSuiteRegions("dns-records", "GET", params, res);
 });
 
 // ===== DNS Management Endpoints =====
