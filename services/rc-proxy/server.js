@@ -1122,27 +1122,32 @@ app.post("/googleapps/admin/add", requireAuth, async (req, res) => {
   params.append("company", company || `${firstName} ${lastName}`);
   params.append("zip", zip || "00000");
 
-  const regions = ["in", "se", "gbl"];
+  const regions = ["in", "se", "gbl", "eu", "us"];
   let lastError = null;
   let lastStatus = 502;
 
   for (const region of regions) {
-    const apiUrl = `${RC_BASE_URL}/gapps/${region}/admin/add.json`;
-    console.log(
-      `[proxy] /googleapps/admin/add: Trying region ${region} - ${apiUrl}`,
-    );
+    const apiUrls = [
+      `${RC_BASE_URL}/gapps/${region}/admin/add.json`,
+      `${RC_BASE_URL}/gapps/${region}/admin/add.xml`,
+    ];
 
-    try {
-      const response = await fetch(apiUrl, {
-        method: "POST",
-        headers: {
-          ...UPSTREAM_HEADERS,
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: params.toString(),
-      });
+    for (const apiUrl of apiUrls) {
+      console.log(
+        `[proxy] /googleapps/admin/add: Trying region ${region} - ${apiUrl}`,
+      );
 
-      const body = await response.text();
+      try {
+        const response = await fetch(apiUrl, {
+          method: "POST",
+          headers: {
+            ...UPSTREAM_HEADERS,
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: params.toString(),
+        });
+
+        const body = await response.text();
       const contentType = response.headers.get("content-type");
 
       logUpstreamDiagnostics(
@@ -1192,7 +1197,8 @@ app.post("/googleapps/admin/add", requireAuth, async (req, res) => {
       console.error(`[googleapps/admin/add] Error in region ${region}:`, error);
       lastError = error.message;
     }
-  }
+    } // End of xml-fallback loop
+  } // End of region loop
 
   // If we're here, all regions failed
   res
@@ -1484,13 +1490,18 @@ app.post("/googleapps/add-account", requireAuth, async (req, res) => {
  * Generic helper to try GSuite action across regions
  */
 async function tryGSuiteRegions(endpoint, method, params, res) {
-  const regions = ["in", "se", "gbl"];
+  const regions = ["in", "se", "gbl", "eu", "us"];
   let lastError = null;
   let lastStatus = 502;
 
   for (const region of regions) {
-    const apiUrl = `${RC_BASE_URL}/gapps/${region}/${endpoint}.json`;
-    console.log(`[proxy] GSuite Action: Trying ${method} ${apiUrl}`);
+    const apiUrls = [
+      `${RC_BASE_URL}/gapps/${region}/${endpoint}.json`,
+      `${RC_BASE_URL}/gapps/${region}/${endpoint}.xml`,
+    ];
+
+    for (const apiUrl of apiUrls) {
+      console.log(`[proxy] GSuite Action: Trying ${method} ${apiUrl}`);
 
     try {
       const response = await fetch(apiUrl, {
@@ -1548,7 +1559,8 @@ async function tryGSuiteRegions(endpoint, method, params, res) {
     } catch (error) {
       lastError = error.message;
     }
-  }
+    } // End of xml-fallback loop
+  } // End of region loop
 
   res
     .status(lastStatus)
@@ -1642,9 +1654,11 @@ app.post("/googleapps/activate-free-email", requireAuth, async (req, res) => {
   // Mail activation might also be regional or global.
   // We'll try a few common patterns if the first fails.
   const patterns = [
+    `${RC_BASE_URL}/mail/activate.xml`,
     `${RC_BASE_URL}/mail/activate.json`,
     `${RC_BASE_URL}/mail/in/activate.json`,
     `${RC_BASE_URL}/mail/se/activate.json`,
+    `${RC_BASE_URL}/freeemail/activate.json`,
   ];
 
   let lastError = null;
